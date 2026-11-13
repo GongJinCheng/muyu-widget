@@ -1,0 +1,955 @@
+/* 木鱼挂件 · Shadow DOM 内部样式（与页面样式完全隔离） */
+
+:host {
+  all: initial;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  display: block !important;
+  z-index: 2147483647 !important;
+  pointer-events: none !important;
+}
+
+.my-root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  color: #3b1e08;
+}
+
+.my-root *,
+.my-root *::before,
+.my-root *::after {
+  box-sizing: border-box;
+}
+
+/* ---------------- 木鱼本体 ---------------- */
+
+.my-dock {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 104px;
+  height: 104px;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+/* 圆形触控区：与木鱼视觉本体（直径 96px）重合，四角不拦截页面点击 */
+.my-hit {
+  position: absolute;
+  inset: 4px;
+  z-index: 2;
+  border-radius: 50%;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.my-dock.is-dragging .my-hit {
+  cursor: grabbing;
+}
+
+.my-stage {
+  position: absolute;
+  inset: 4px;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  pointer-events: none;
+}
+
+/* 被敲对象：形变原点与缩放幅度由皮肤数据以 CSS 变量下发 */
+.my-subject {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 78%;
+}
+
+.my-subject.is-hit {
+  animation: my-hit 380ms cubic-bezier(0.22, 0.9, 0.32, 1);
+}
+
+@keyframes my-hit {
+  0% {
+    transform: scale(1, 1) translateY(0);
+  }
+  10% {
+    transform: scale(var(--hit-sx, 1.07), var(--hit-sy, 0.9)) translateY(2.5px);
+  }
+  36% {
+    transform: scale(0.972, 1.05) translateY(-1.5px);
+  }
+  60% {
+    transform: scale(1.014, 0.99) translateY(0.5px);
+  }
+  80% {
+    transform: scale(0.997, 1.003) translateY(0);
+  }
+  100% {
+    transform: scale(1, 1) translateY(0);
+  }
+}
+
+/* 敲击落点的涟漪 */
+.my-ripple {
+  position: absolute;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(232, 164, 66, 0.8);
+  background: radial-gradient(circle, rgba(255, 216, 150, 0.5) 0%, rgba(255, 216, 150, 0) 68%);
+  pointer-events: none;
+  animation: my-ripple 460ms cubic-bezier(0.18, 0.7, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes my-ripple {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* 敲击工具：静止角度与挥动轨迹同样来自皮肤数据 */
+.my-tool {
+  position: absolute;
+  right: -6px;
+  top: 0;
+  width: 34px;
+  height: 56px;
+  transform-origin: 58% 82%;
+  transform: rotate(var(--tool-rest, -26deg));
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgba(40, 18, 4, 0.25));
+}
+
+.my-tool.is-swing {
+  animation: my-swing 320ms cubic-bezier(0.3, 0.9, 0.4, 1);
+}
+
+@keyframes my-swing {
+  0% {
+    transform: rotate(var(--sw-1, -26deg));
+  }
+  20% {
+    transform: rotate(var(--sw-2, 24deg));
+  }
+  46% {
+    transform: rotate(var(--sw-3, -34deg));
+  }
+  72% {
+    transform: rotate(var(--sw-4, -22deg));
+  }
+  100% {
+    transform: rotate(var(--sw-1, -26deg));
+  }
+}
+
+/* ---------------- 功德 +1 ---------------- */
+
+.my-merit {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 3;
+  margin: 0;
+  padding: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  font-family: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif SC', serif;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 0.5px;
+  color: #9c5a1c;
+  text-shadow: 0 0 3px rgba(255, 250, 240, 0.95), 0 1px 0 #fff8ec,
+    0 3px 8px rgba(74, 36, 8, 0.28);
+  animation: my-merit-rise var(--dur, 1000ms) cubic-bezier(0.18, 0.7, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes my-merit-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.85) rotate(var(--rot, 0deg));
+  }
+  16% {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--dx, 0px) * 0.3), -6px) scale(1)
+      rotate(var(--rot, 0deg));
+  }
+  55% {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--dx, 0px) * 0.55), -26px) scale(1.02)
+      rotate(var(--rot, 0deg));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx, 0px)), -54px) scale(1.05)
+      rotate(var(--rot, 0deg));
+  }
+}
+
+/* ---------------- 悬浮小按钮 ---------------- */
+
+.my-tools {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.my-hit:hover + .my-tools,
+.my-tools:hover,
+.my-tools:focus-within,
+.my-dock.is-open .my-tools {
+  opacity: 1;
+}
+
+.my-dock.is-dragging .my-tools {
+  opacity: 0;
+}
+
+@media (hover: none) {
+  .my-tools {
+    opacity: 0.85;
+  }
+}
+
+.my-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 252, 246, 0.94);
+  color: #6b3a12;
+  box-shadow: 0 1px 4px rgba(60, 30, 8, 0.28), inset 0 0 0 1px rgba(120, 70, 20, 0.14);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.15s ease;
+}
+
+.my-btn:hover {
+  background: #fff;
+}
+
+/* 自动敲击开启态：实心琥珀色，和另外两个中性按钮区分开 */
+.my-btn.is-on {
+  background: linear-gradient(160deg, #f0a94a 0%, #d9822b 100%);
+  color: #fffdf7;
+  box-shadow: 0 1px 5px rgba(150, 82, 12, 0.45), inset 0 0 0 1px rgba(255, 226, 180, 0.5);
+}
+
+.my-btn.is-on:hover {
+  background: linear-gradient(160deg, #f5b65f 0%, #e08d33 100%);
+}
+
+.my-btn:active {
+  transform: scale(0.94);
+}
+
+.my-btn svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+/* ---------------- 收起后的圆形入口 ---------------- */
+
+.my-tab {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(120% 120% at 30% 22%, #fffdf8 0%, #fdf2e2 55%, #f2dcc0 100%);
+  box-shadow: 0 6px 18px rgba(60, 30, 8, 0.26), inset 0 0 0 1px rgba(140, 90, 40, 0.18);
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.my-tab:hover {
+  box-shadow: 0 8px 22px rgba(60, 30, 8, 0.32), inset 0 0 0 1px rgba(140, 90, 40, 0.28);
+}
+
+.my-tab .my-tab-fish {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .my-subject.is-hit,
+  .my-tool.is-swing,
+  .my-ripple {
+    animation-duration: 1ms;
+  }
+}
+
+/* ---------------- 换肤面板 ---------------- */
+
+.my-skins {
+  position: absolute;
+  z-index: 6;
+  width: 178px;
+  padding: 8px 9px 9px;
+  border-radius: 12px;
+  background: linear-gradient(165deg, rgba(255, 253, 248, 0.98), rgba(249, 239, 224, 0.98));
+  box-shadow: 0 10px 26px rgba(58, 28, 6, 0.24), inset 0 0 0 1px rgba(140, 90, 40, 0.16);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  pointer-events: auto;
+  font-size: 11px;
+  color: #4a2a10;
+}
+
+.my-skins[hidden] {
+  display: none;
+}
+
+.my-sk-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.my-sk-row + .my-sk-row {
+  margin-top: 7px;
+}
+
+.my-sk-label {
+  flex: none;
+  width: 26px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: #8a6239;
+}
+
+.my-sk-opts {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+}
+
+.my-sk-opt {
+  flex: 1;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(150, 100, 50, 0.2);
+  color: #6b3a12;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.my-sk-opt:hover {
+  background: #fff;
+}
+
+.my-sk-opt.is-on {
+  background: linear-gradient(160deg, #f0a94a 0%, #d9822b 100%);
+  color: #fffdf7;
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 180, 0.55);
+}
+
+/* ---------------- 设置面板 ---------------- */
+
+.my-settings {
+  position: absolute;
+  z-index: 7;
+  width: 252px;
+  max-height: min(76vh, 560px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: linear-gradient(165deg, rgba(255, 253, 248, 0.985), rgba(249, 239, 224, 0.985));
+  box-shadow: 0 14px 34px rgba(58, 28, 6, 0.26), inset 0 0 0 1px rgba(140, 90, 40, 0.16);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: auto;
+  color: #4a2a10;
+  font-size: 11px;
+  overflow: hidden;
+}
+
+.my-settings[hidden] {
+  display: none;
+}
+
+.my-set-head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 9px 12px 7px;
+  border-bottom: 1px solid rgba(150, 100, 50, 0.13);
+}
+
+.my-set-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  color: #8a5a25;
+}
+
+.my-set-date {
+  font-size: 9.5px;
+  letter-spacing: 0.3px;
+  color: #ab8a66;
+}
+
+.my-set-body {
+  padding: 8px 11px 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.my-set-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.my-set-body::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(150, 100, 50, 0.26);
+}
+
+.my-set-group + .my-set-group {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed rgba(150, 100, 50, 0.2);
+}
+
+.my-set-title {
+  margin-bottom: 6px;
+  font-size: 9.5px;
+  letter-spacing: 1.3px;
+  color: #b08a5f;
+}
+
+.my-set-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3.5px 0;
+  font-size: 11px;
+  color: #5c3413;
+}
+
+/* 开关 */
+
+.my-switch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 17px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(150, 105, 55, 0.26);
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.my-switch i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fffdf8;
+  box-shadow: 0 1px 2px rgba(60, 30, 8, 0.35);
+  transition: transform 0.16s ease;
+}
+
+.my-switch.is-on {
+  background: linear-gradient(160deg, #f0a94a 0%, #d9822b 100%);
+}
+
+.my-switch.is-on i {
+  transform: translateX(13px);
+}
+
+/* 下拉与数字 */
+
+.my-select {
+  flex: none;
+  max-width: 116px;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(150, 100, 50, 0.22);
+  font-family: inherit;
+  font-size: 10.5px;
+  color: #6b3a12;
+  cursor: pointer;
+}
+
+.my-num-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.my-num {
+  width: 54px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(150, 100, 50, 0.22);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8c4f12;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-num:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(217, 130, 43, 0.7), 0 0 0 2px rgba(240, 169, 74, 0.2);
+}
+
+.my-num::-webkit-outer-spin-button,
+.my-num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.my-num-wrap em {
+  font-style: normal;
+  font-size: 10px;
+  color: #a9825a;
+}
+
+/* ---------------- 功德数据 ---------------- */
+
+.my-set-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.my-sp-ring {
+  position: relative;
+  flex: none;
+  width: 64px;
+  height: 64px;
+}
+
+.my-sp-ring svg {
+  display: block;
+  width: 64px;
+  height: 64px;
+}
+
+.my-ring-bg {
+  fill: none;
+  stroke: rgba(170, 120, 60, 0.16);
+  stroke-width: 5.5;
+}
+
+.my-ring-fg {
+  fill: none;
+  stroke: #de9536;
+  stroke-width: 5.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.32s ease, stroke 0.2s ease;
+  filter: drop-shadow(0 1px 1.5px rgba(180, 110, 20, 0.35));
+}
+
+.my-sp-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.my-sp-center b {
+  font-size: 17px;
+  line-height: 1;
+  font-weight: 700;
+  color: #8c4f12;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-sp-center i {
+  font-style: normal;
+  font-size: 8.5px;
+  line-height: 1;
+  color: #ad8b64;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-sp-rows {
+  flex: 1;
+  min-width: 0;
+}
+
+.my-sp-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 1px;
+  border-top: 1px dashed rgba(150, 100, 50, 0.16);
+  font-size: 10px;
+  color: #8a6239;
+  white-space: nowrap;
+}
+
+.my-sp-row:first-child {
+  border-top: 0;
+}
+
+.my-sp-row b {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b3a12;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-sp-hint {
+  margin-top: 5px;
+  text-align: center;
+  font-size: 9.5px;
+  letter-spacing: 0.2px;
+  color: #ab8a66;
+}
+
+.my-settings.is-done .my-ring-fg {
+  stroke: #e9a52a;
+}
+
+.my-settings.is-done .my-sp-center b {
+  color: #b4720f;
+}
+
+.my-settings.is-done .my-sp-hint {
+  color: #b4720f;
+}
+
+/* ---------------- 功德卡预览（文案可点改） ---------------- */
+
+.my-card-slot {
+  margin-top: 2px;
+}
+
+.my-cv {
+  width: 100%;
+}
+
+.my-cv-paper {
+  position: relative;
+  padding: 9px 8px 8px;
+  border-radius: 7px;
+  background: linear-gradient(160deg, #fffdf7 0%, #fdf4e4 55%, #f6e6cb 100%);
+  box-shadow: inset 0 0 0 1px rgba(150, 100, 46, 0.28), 0 3px 10px rgba(90, 50, 10, 0.12);
+  text-align: center;
+  color: #6b3a12;
+  overflow: hidden;
+}
+
+.my-cv-paper::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(180, 132, 74, 0.18);
+  pointer-events: none;
+}
+
+.my-cv-edit {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 2px;
+  border-radius: 3px;
+  cursor: text;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.14s ease, box-shadow 0.14s ease;
+}
+
+.my-cv-edit:hover,
+.my-cv-edit:focus-visible {
+  outline: none;
+  background: rgba(240, 169, 74, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(217, 130, 43, 0.32);
+}
+
+.my-cv-title {
+  display: block;
+  margin: 0 auto;
+  font-family: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif SC', serif;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 6px;
+  text-indent: 6px;
+  color: #6b3a12;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.my-cv-date {
+  margin-top: 1px;
+  font-size: 7.5px;
+  letter-spacing: 0.2px;
+  color: #a9825a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.my-cv-av {
+  display: block;
+  width: 58%;
+  margin: 4px auto 2px;
+  pointer-events: none;
+}
+
+.my-cv-ring {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  margin: 2px auto 4px;
+  border-radius: 50%;
+  background: conic-gradient(#e8a94f var(--pct, 0%), rgba(170, 118, 58, 0.14) 0);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.my-cv-ring::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #fffdf7, #fbf1e0);
+}
+
+.my-cv-ring > * {
+  position: relative;
+  z-index: 1;
+}
+
+.my-cv-ring b {
+  font-size: 21px;
+  line-height: 1.05;
+  color: #8c4f12;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-cv-ring i {
+  font-style: normal;
+  font-size: 7.5px;
+  line-height: 1.1;
+  color: #ad8b64;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-cv-today {
+  margin-top: 1px;
+  font-family: 'Songti SC', 'PingFang SC', serif;
+  font-size: 8.5px;
+  color: #8c4f12;
+  white-space: nowrap;
+}
+
+.my-cv-cols {
+  display: flex;
+  margin-top: 4px;
+}
+
+.my-cv-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 0 1px;
+}
+
+.my-cv-col + .my-cv-col {
+  border-left: 1px dashed rgba(150, 100, 50, 0.22);
+}
+
+.my-cv-col b {
+  font-size: 12px;
+  line-height: 1.2;
+  color: #6b3a12;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-cv-col .my-cv-edit {
+  font-size: 8px;
+  color: #a9825a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.my-cv-foot {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(150, 100, 50, 0.18);
+  border-radius: 0 0 3px 3px;
+  font-size: 7.5px;
+  line-height: 1.3;
+  color: #a9825a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.my-cv-edit.is-editing {
+  display: block;
+  width: 100%;
+  max-width: none;
+  background: #fffdf6;
+  box-shadow: inset 0 0 0 1px rgba(217, 130, 43, 0.62);
+  color: transparent; /* 原文由输入框接管，避免两层文字叠在一起 */
+}
+
+.my-cv-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0 1px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  font: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-indent: 0;
+  color: #6b3a12;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-cv-input:focus {
+  outline: none;
+}
+
+.my-copy-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 9px;
+  color: #ab8a66;
+}
+
+.my-link {
+  flex: none;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 9.5px;
+  color: #b4720f;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.my-link:hover {
+  color: #d9822b;
+}
+
+/* ---------------- 保存功德卡 ---------------- */
+
+.my-save {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 0;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(160deg, #f0a94a 0%, #d9822b 100%);
+  color: #fffdf7;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(180, 110, 20, 0.34), inset 0 0 0 1px rgba(255, 226, 180, 0.5);
+  transition: filter 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+.my-save:hover {
+  filter: brightness(1.05);
+}
+
+.my-save:active {
+  transform: scale(0.985);
+}
+
+.my-save.is-busy {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
