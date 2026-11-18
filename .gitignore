@@ -1,2 +1,7 @@
 .DS_Store
 *.zip
+dist/
+# 临时截图（调试用），但商店提交用的图要进仓库
+tools/shots/*
+!tools/shots/store/
+.srvpid

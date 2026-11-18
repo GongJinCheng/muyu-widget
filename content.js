@@ -29,329 +29,210 @@
   const SYNC_DELAY = 4000; // 同步写入的合并间隔（避开 storage.sync 的每分钟写入配额）
 
   const clamp = (v, min, max) => (v < min ? min : v > max ? max : v);
+  // 减弱动态：CSS 动画在媒体查询里压掉了，但物理是 rAF 驱动的，
+  // 需要 JS 自己判断。用函数而非常量，这样用户中途改系统设置也能生效。
+  const reduceMotion = () => {
+    try {
+      return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch (err) {
+      return false;
+    }
+  };
   const vw = () => document.documentElement.clientWidth || window.innerWidth || 0;
   const vh = () => document.documentElement.clientHeight || window.innerHeight || 0;
   const maxX = () => Math.max(0, vw() - BOX);
   const maxY = () => Math.max(0, vh() - BOX - FLOOR_GAP);
 
   /* ------------------------------------------------------------------ *
-   * 音效：Web Audio 合成木鱼“叩”声，不依赖任何音频文件
+   * 音效：模态合成的木鱼「笃」声
+   * ------------------------------------------------------------------ *
+   * 不采样、不加载文件，纯 Web Audio 实时合成。做法是模拟一块被敲击的
+   * 空心木头的几个模态：
+   *
+   *   1. 敲击瞬态：极短的低通噪声，只负责「咔」的那一下接触感
+   *   2. 腔体基频：正弦 + 略微下滑，木鱼空腔的主音高
+   *   3. 木体共振：两个非整数倍泛音（2.76 / 5.4 倍），这是木头区别于
+   *      金属、玻璃的关键——整数倍听起来像铃声，非整数倍才「闷」
+   *   4. 余响：基频带一点点频率漂移，模拟敲完之后木头的轻微嗡鸣
+   *
+   * 每一下的基频、泛音强度、噪声量都有微小随机，避免连击像机关枪。
    * ------------------------------------------------------------------ */
   const sound = {
     ctx: null,
     master: null,
     muted: false,
+    // 泛音比列为「非整数倍」：木头、陶、石都是这样，金属才是整数倍
+    PARTIALS: [
+      { ratio: 2.76, gain: 0.18, decay: 0.055 },
+      { ratio: 5.4, gain: 0.075, decay: 0.032 },
+      { ratio: 8.9, gain: 0.03, decay: 0.018 }
+    ],
 
     ensure() {
-      if (!this.ctx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return null;
-        try {
+      // 整个初始化都放进 try：构造成功但节点创建失败的环境里，
+      // 之前会抛出未捕获异常（计数已加、却没声音没动画）。
+      try {
+        if (!this.ctx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return null;
           this.ctx = new AC();
-        } catch (err) {
-          return null;
+
+          // 一路轻压缩，防止连击时叠加爆音
+          const comp = this.ctx.createDynamicsCompressor();
+          comp.threshold.value = -18;
+          comp.knee.value = 22;
+          comp.ratio.value = 5;
+          comp.attack.value = 0.001;
+          comp.release.value = 0.16;
+
+          this.master = this.ctx.createGain();
+          this.master.gain.value = 0.7;
+          this.master.connect(comp);
+          comp.connect(this.ctx.destination);
         }
-        const comp = this.ctx.createDynamicsCompressor();
-        comp.threshold.value = -20;
-        comp.knee.value = 24;
-        comp.ratio.value = 6;
-        comp.attack.value = 0.002;
-        comp.release.value = 0.2;
-        this.master = this.ctx.createGain();
-        this.master.gain.value = 0.72;
-        this.master.connect(comp);
-        comp.connect(this.ctx.destination);
+        if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+        return this.ctx;
+      } catch (err) {
+        // 静默降级：没有声音也比整个交互崩掉好
+        this.ctx = null;
+        this.master = null;
+        return null;
       }
-      if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-      return this.ctx;
     },
 
-    play(strength = 1) {
+    /**
+     * @param {number} strength 0–1，敲击力度（自动敲击会略轻）
+     * @param {object} tone 皮肤音色 { base, ring, thud }
+     */
+    play(strength = 1, tone = null) {
       if (this.muted) return;
       const ctx = this.ensure();
       if (!ctx) return;
 
       const t = ctx.currentTime + 0.001;
-      const base = 470 * (0.94 + Math.random() * 0.13); // 每下略有差异，避免机械感
-      const vol = 0.62 * strength;
+      const tk = tone || { base: 452, ring: 1.9, thud: 0.6 };
 
+      // 每一下的基频抖动 ±5%，连击才不像机器
+      const base = tk.base * (0.95 + Math.random() * 0.1);
+      const vol = clamp(0.55 * strength, 0.05, 0.9);
+      const thud = clamp(tk.thud, 0, 1); // 越大越闷
+
+      // 总线：这一下的所有声音都挂在这个 gain 上，结束统一断开
       const out = ctx.createGain();
       out.gain.value = 1;
       out.connect(this.master);
 
-      // 1) 木质腔体共鸣：三角波 + 快速下滑音高
+      /* ---- 1) 腔体基频 ---- */
       const body = ctx.createOscillator();
-      body.type = 'triangle';
-      body.frequency.setValueAtTime(base * 1.85, t);
-      body.frequency.exponentialRampToValueAtTime(base, t + 0.045);
+      body.type = 'sine';
+      // 起音略高然后落下来：木头被压下去的瞬间张力更大
+      body.frequency.setValueAtTime(base * 1.09, t);
+      body.frequency.exponentialRampToValueAtTime(base, t + 0.028);
+      // 尾音轻微下滑，收得更自然
+      body.frequency.exponentialRampToValueAtTime(base * 0.985, t + 0.2);
+
       const bodyGain = ctx.createGain();
       bodyGain.gain.setValueAtTime(0.0001, t);
-      bodyGain.gain.exponentialRampToValueAtTime(vol, t + 0.006);
-      bodyGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
-      body.connect(bodyGain).connect(out);
+      bodyGain.gain.exponentialRampToValueAtTime(vol, t + 0.004);
+      bodyGain.gain.exponentialRampToValueAtTime(vol * 0.34, t + 0.055);
+      bodyGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.26 + thud * 0.12);
+
+      // 闷度：加个低通，砍掉高频让声音「厚」
+      const bodyLP = ctx.createBiquadFilter();
+      bodyLP.type = 'lowpass';
+      bodyLP.frequency.value = 3200 - thud * 1500;
+      bodyLP.Q.value = 0.6;
+
+      body.connect(bodyGain).connect(bodyLP).connect(out);
       body.start(t);
-      body.stop(t + 0.2);
+      body.stop(t + 0.42);
 
-      // 2) 木片高频“嗒”
-      const clack = ctx.createOscillator();
-      clack.type = 'sine';
-      clack.frequency.setValueAtTime(base * 3.05, t);
-      const clackGain = ctx.createGain();
-      clackGain.gain.setValueAtTime(0.0001, t);
-      clackGain.gain.exponentialRampToValueAtTime(vol * 0.34, t + 0.003);
-      clackGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
-      clack.connect(clackGain).connect(out);
-      clack.start(t);
-      clack.stop(t + 0.08);
+      /* ---- 2) 木体泛音（非整数倍） ---- */
+      this.PARTIALS.forEach((p, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = i === 0 ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(base * p.ratio * (0.98 + Math.random() * 0.04), t);
 
-      // 3) 敲击瞬态噪声
-      const len = Math.max(1, Math.floor(ctx.sampleRate * 0.045));
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vol * p.gain * (1 - thud * 0.55), t + 0.002);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + p.decay * 3.2);
+
+        osc.connect(g).connect(out);
+        osc.start(t);
+        osc.stop(t + p.decay * 3.6);
+      });
+
+      /* ---- 3) 敲击瞬态 ---- */
+      const len = Math.max(1, Math.floor(ctx.sampleRate * 0.03));
       const buf = ctx.createBuffer(1, len, ctx.sampleRate);
       const data = buf.getChannelData(0);
       for (let i = 0; i < len; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+        // 指数衰减的白噪声，起手极陡
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 5);
       }
       const noise = ctx.createBufferSource();
       noise.buffer = buf;
+
       const bp = ctx.createBiquadFilter();
       bp.type = 'bandpass';
-      bp.frequency.value = 2100;
-      bp.Q.value = 1.1;
+      bp.frequency.value = 1700 + Math.random() * 700;
+      bp.Q.value = 0.9;
+
       const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(vol * 0.75, t);
-      noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      noiseGain.gain.setValueAtTime(vol * 0.42 * (1 - thud * 0.35), t);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.032);
+
       noise.connect(bp).connect(noiseGain).connect(out);
       noise.start(t);
 
+      // 这一下播完就摘掉总线，避免 gain 节点越积越多
       window.setTimeout(() => {
         try {
           out.disconnect();
         } catch (err) {
           /* noop */
         }
-      }, 420);
+      }, 620);
     }
   };
 
   /* ------------------------------------------------------------------ *
-   * 图形
+   * 美术资产：形象、工具、收起图标
+   * ------------------------------------------------------------------ *
+   * 图形本身搬到 art.js（纯数据的「图形 + 文案 + 敲击参数」注册表），
+   * 由 manifest 排在 content.js 之前加载。这样改美术不用碰交互逻辑，
+   * 也能单独用 tools/art.html 大图预览。
    * ------------------------------------------------------------------ */
-  const FISH_SVG = `
-    <svg class="my-subject" viewBox="0 0 120 120" aria-hidden="true">
-      <defs>
-        <radialGradient id="myWood" cx="34%" cy="20%" r="94%">
-          <stop offset="0%" stop-color="#f8d4a0"/>
-          <stop offset="26%" stop-color="#e2a55f"/>
-          <stop offset="58%" stop-color="#af6729"/>
-          <stop offset="86%" stop-color="#7f4114"/>
-          <stop offset="100%" stop-color="#542609"/>
-        </radialGradient>
-        <linearGradient id="myRim" x1="0.12" y1="0" x2="0.62" y2="1">
-          <stop offset="0%" stop-color="#ffe7c3"/>
-          <stop offset="34%" stop-color="#cf8c47"/>
-          <stop offset="74%" stop-color="#8a4a19"/>
-          <stop offset="100%" stop-color="#401c05"/>
-        </linearGradient>
-        <linearGradient id="myEdge" x1="0" y1="0" x2="0.9" y2="1">
-          <stop offset="0%" stop-color="#fff2da" stop-opacity="0.85"/>
-          <stop offset="38%" stop-color="#ffd79f" stop-opacity="0.16"/>
-          <stop offset="72%" stop-color="#6b3208" stop-opacity="0.12"/>
-          <stop offset="100%" stop-color="#3d1903" stop-opacity="0.4"/>
-        </linearGradient>
-        <radialGradient id="myGloss" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#fffaf0" stop-opacity="0.74"/>
-          <stop offset="55%" stop-color="#fffaf0" stop-opacity="0.16"/>
-          <stop offset="100%" stop-color="#fffaf0" stop-opacity="0"/>
-        </radialGradient>
-        <radialGradient id="myShade" cx="50%" cy="38%" r="62%">
-          <stop offset="0%" stop-color="#3a1602" stop-opacity="0"/>
-          <stop offset="68%" stop-color="#3a1602" stop-opacity="0.05"/>
-          <stop offset="100%" stop-color="#3a1602" stop-opacity="0.34"/>
-        </radialGradient>
-        <filter id="myShadow" x="-40%" y="-30%" width="180%" height="190%">
-          <feDropShadow dx="0" dy="4" stdDeviation="3.2" flood-color="#2a1204" flood-opacity="0.42"/>
-        </filter>
-        <clipPath id="myClip">
-          <path d="M60 27c23 0 38 15 38 34s-16 34-38 34-38-15-38-34 15-34 38-34Z"/>
-        </clipPath>
-      </defs>
-      <g filter="url(#myShadow)">
-        <path d="M60 20c27 0 45 18 45 41 0 24-19 41-45 41S15 85 15 61C15 38 33 20 60 20Z" fill="url(#myRim)"/>
-        <path d="M60 27c23 0 38 15 38 34s-16 34-38 34-38-15-38-34 15-34 38-34Z" fill="url(#myWood)"/>
-        <g clip-path="url(#myClip)">
-          <g opacity="0.17" fill="none" stroke="#3d1d05" stroke-linecap="round">
-            <path d="M21 46c12-8 28-11 44-9 10 1 18 4 25 8" stroke-width="1.7"/>
-            <path d="M19 59c16-7 35-9 53-6 8 1 16 3 22 6" stroke-width="1.3"/>
-            <path d="M21 71c16-4 34-5 51-3 8 1 15 3 21 6" stroke-width="1.6"/>
-            <path d="M27 83c14 3 30 3 46-1 8-2 14-5 18-8" stroke-width="1.2"/>
-            <path d="M33 35c8-4 18-6 28-6 8 0 16 2 22 5" stroke-width="1.15"/>
-          </g>
-          <g opacity="0.14" fill="none" stroke="#ffe2b4" stroke-linecap="round">
-            <path d="M23 51c12-7 27-10 42-9" stroke-width="1.2"/>
-            <path d="M25 65c15-5 31-7 46-6" stroke-width="1"/>
-          </g>
-          <rect x="10" y="10" width="100" height="100" fill="url(#myShade)"/>
-          <ellipse cx="44" cy="39" rx="21" ry="9" fill="url(#myGloss)" transform="rotate(-20 44 39)"/>
-        </g>
-        <path d="M60 27c23 0 38 15 38 34s-16 34-38 34-38-15-38-34 15-34 38-34Z" fill="none" stroke="url(#myEdge)" stroke-width="2.6"/>
-        <g fill="none" stroke="#4a2408" stroke-width="2.6" opacity="0.85">
-          <circle cx="42" cy="50" r="7.5"/>
-          <circle cx="78" cy="50" r="7.5"/>
-        </g>
-        <g fill="#4a2408" opacity="0.85">
-          <circle cx="42" cy="50" r="2.4"/>
-          <circle cx="78" cy="50" r="2.4"/>
-        </g>
-        <path d="M36 76c14 8 36 9 52-2" fill="none" stroke="#3a1c06" stroke-width="6" stroke-linecap="round" opacity="0.72"/>
-      </g>
-    </svg>`;
-
-  const MALLET_SVG = `
-    <svg class="my-tool" viewBox="0 0 60 100" aria-hidden="true">
-      <defs>
-        <linearGradient id="myHead" x1="0.2" y1="0" x2="0.9" y2="1">
-          <stop offset="0%" stop-color="#f4cb94"/>
-          <stop offset="45%" stop-color="#c4823c"/>
-          <stop offset="100%" stop-color="#6d3510"/>
-        </linearGradient>
-      </defs>
-      <rect x="26.5" y="22" width="8" height="72" rx="4" fill="#a8692c"/>
-      <rect x="26.5" y="22" width="3" height="72" rx="1.5" fill="#cf9350" opacity="0.65"/>
-      <circle cx="30.5" cy="18" r="15.5" fill="url(#myHead)"/>
-      <ellipse cx="25" cy="12" rx="5.5" ry="3.6" fill="#fff3dd" opacity="0.45"/>
-    </svg>`;
-
-  /** 被敲对象之二：锦鲤 */
-  const KOI_SVG = `
-    <svg class="my-subject" viewBox="0 0 120 120" aria-hidden="true">
-      <defs>
-        <radialGradient id="koiBody" cx="34%" cy="26%" r="88%">
-          <stop offset="0%" stop-color="#ffe2ba"/>
-          <stop offset="30%" stop-color="#f4ae5b"/>
-          <stop offset="68%" stop-color="#cf7a2c"/>
-          <stop offset="100%" stop-color="#8f3f0d"/>
-        </radialGradient>
-        <linearGradient id="koiFin" x1="0.1" y1="0" x2="0.9" y2="1">
-          <stop offset="0%" stop-color="#ffd9a8"/>
-          <stop offset="55%" stop-color="#e79345"/>
-          <stop offset="100%" stop-color="#b85618"/>
-        </linearGradient>
-        <radialGradient id="koiGloss" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#fffaf0" stop-opacity="0.72"/>
-          <stop offset="60%" stop-color="#fffaf0" stop-opacity="0.16"/>
-          <stop offset="100%" stop-color="#fffaf0" stop-opacity="0"/>
-        </radialGradient>
-        <filter id="koiShadow" x="-40%" y="-30%" width="180%" height="180%">
-          <feDropShadow dx="0" dy="3" stdDeviation="2.6" flood-color="#2a1204" flood-opacity="0.38"/>
-        </filter>
-      </defs>
-      <g filter="url(#koiShadow)">
-        <path d="M84 60c8-11 16-16 24-15 1.5 7-1.5 13-7 17 5.5 4 8.5 10 7 17-8 1-16-4-24-15Z" fill="url(#koiFin)"/>
-        <path d="M58 37c7-8 17-11 26-8-6 5-10 11-12 18Z" fill="url(#koiFin)"/>
-        <path d="M54 84c7 8 17 11 26 8-6-5-10-11-12-18Z" fill="url(#koiFin)"/>
-        <ellipse cx="55" cy="61" rx="33" ry="25" transform="rotate(-6 55 61)" fill="url(#koiBody)"/>
-        <path d="M52 72c7 5 15 6 22 3-6 8-17 10-24 6Z" fill="url(#koiFin)" opacity="0.9"/>
-        <g fill="none" stroke="#8a3b0c" stroke-width="1.4" opacity="0.22" stroke-linecap="round">
-          <path d="M40 50c7-3 15-3 22 0"/>
-          <path d="M38 60c8-3 17-3 25 0"/>
-          <path d="M40 70c7-3 15-3 22 0"/>
-          <path d="M46 46c2 4 2 8 0 12"/>
-          <path d="M58 46c2 4 2 8 0 12"/>
-          <path d="M46 66c2 4 2 8 0 12"/>
-          <path d="M58 66c2 4 2 8 0 12"/>
-        </g>
-        <circle cx="36" cy="54" r="6.2" fill="#fffaf0"/>
-        <circle cx="36.4" cy="54.4" r="3" fill="#3a1a06"/>
-        <circle cx="34.6" cy="52.6" r="1" fill="#fff"/>
-        <path d="M24 63c3 2 6 2 9 0" fill="none" stroke="#7c3408" stroke-width="2.2" stroke-linecap="round" opacity="0.8"/>
-        <ellipse cx="46" cy="45" rx="16" ry="8" fill="url(#koiGloss)" transform="rotate(-16 46 45)"/>
-      </g>
-    </svg>`;
-
-  /** 敲击工具之二：手 */
-  const HAND_SVG = `
-    <svg class="my-tool" viewBox="0 0 60 100" aria-hidden="true">
-      <defs>
-        <linearGradient id="handSkin" x1="0.2" y1="0" x2="0.85" y2="1">
-          <stop offset="0%" stop-color="#ffe0c2"/>
-          <stop offset="45%" stop-color="#f0b98d"/>
-          <stop offset="100%" stop-color="#c5814f"/>
-        </linearGradient>
-      </defs>
-      <rect x="25" y="56" width="14" height="44" rx="7" fill="url(#handSkin)"/>
-      <path d="M21 64c-2-9-1-19 3-26 2-4 7-5 9-1 1 2 2 5 2 8 0-8 2-13 6-13 5 0 7 5 7 13 0 2 0 4-1 6 3-3 7-2 7 2 0 4-2 9-5 13-4 5-9 7-15 7s-11-3-13-9Z" fill="url(#handSkin)"/>
-      <g stroke="#b06d3d" stroke-width="1.4" opacity="0.55" fill="none" stroke-linecap="round">
-        <path d="M31 46c-1 6-1 12 0 17"/>
-        <path d="M38 42c-1 7-1 13 0 19"/>
-        <path d="M44 44c0 6 0 11-1 16"/>
-      </g>
-      <ellipse cx="30" cy="52" rx="6" ry="3.4" fill="#fff2e2" opacity="0.5"/>
-    </svg>`;
-
-  /* ------------------------------------------------------------------ *
-   * 皮肤注册表
-   * 每个形象都是一份纯数据：图形 + 文案 + 敲击形变/挥动轨迹。
-   * 新增形象（铜钟、猫爪…）只需在这里追加一项，交互逻辑无需改动。
-   * ------------------------------------------------------------------ */
-  const SUBJECTS = {
-    muyu: {
-      label: '木鱼',
-      verb: '功德',
-      // 功德卡上的默认文案：换形象时自动跟着变
-      copy: {
-        title: '功德',
-        today: '今日功德',
-        total: '累计功德',
-        streak: '连续敲击',
-        goal: '目标完成',
-        footer: '木鱼挂件 · 敲一下，功德 +1'
+  const ART = (() => {
+    const art = window.MuyuArt;
+    if (art && art.SUBJECTS && art.TOOLS) return art;
+    // art.js 没加载成功时的兜底：至少让挂件能显示，不至于整页空白
+    const fallback = '<svg class="my-subject" viewBox="0 0 120 120"><circle cx="60" cy="60" r="38" fill="#a55c26"/></svg>';
+    return {
+      SUBJECTS: {
+        muyu: {
+          label: '木鱼',
+          verb: '功德',
+          copy: { title: '功德', today: '今日功德', total: '累计功德', streak: '连续敲击', goal: '目标完成', footer: '木鱼挂件 · 敲一下，功德 +1' },
+          svg: fallback,
+          squash: [1.06, 0.91],
+          origin: '50% 80%',
+          impact: [50, 66],
+          tone: { base: 452, ring: 1.94, thud: 0.62 }
+        }
       },
-      svg: FISH_SVG,
-      squash: [1.07, 0.9], // 敲击瞬间的 x/y 缩放峰值
-      origin: '50% 78%', // 形变原点（与木鱼重心一致）
-      impact: [50, 64] // 敲击落点（占对象宽高的百分比），用于涟漪
-    },
-    fish: {
-      label: '鱼',
-      verb: '摸鱼',
-      copy: {
-        title: '摸鱼',
-        today: '今日摸鱼',
-        total: '累计摸鱼',
-        streak: '连续摸鱼',
-        goal: '目标完成',
-        footer: '木鱼挂件 · 摸一下，摸鱼 +1'
-      },
-      svg: KOI_SVG,
-      squash: [1.05, 0.93],
-      origin: '50% 74%',
-      impact: [48, 60]
-    }
-  };
+      TOOLS: { mallet: { label: '木槌', svg: '', rest: -26, swing: [-26, 24, -34, -22] } },
+      SKIN_DEFAULT: { subject: 'muyu', tool: 'mallet' },
+      MINI_FISH: ''
+    };
+  })();
 
-  const TOOLS = {
-    mallet: {
-      label: '木槌',
-      svg: MALLET_SVG,
-      rest: -26, // 静止角度
-      swing: [-26, 24, -34, -22] // 挥动关键帧角度
-    },
-    hand: {
-      label: '手',
-      svg: HAND_SVG,
-      rest: -56,
-      swing: [-56, -18, -72, -58]
-    }
-  };
+  const SUBJECTS = ART.SUBJECTS;
+  const TOOLS = ART.TOOLS;
+  const SKIN_DEFAULT = ART.SKIN_DEFAULT;
+  const MINI_FISH = ART.MINI_FISH;
 
-  const SKIN_DEFAULT = { subject: 'muyu', tool: 'mallet' };
-
-  const MINI_FISH = `
-    <svg class="my-tab-fish" viewBox="0 0 40 40" aria-hidden="true">
-      <path d="M20 6c10 0 16 6 16 14s-7 15-16 15S4 28 4 20 10 6 20 6Z" fill="#8a4a19"/>
-      <path d="M20 10c8 0 12 4 12 10s-5 11-12 11S8 27 8 20s4-10 12-10Z" fill="#d79a55"/>
-      <path d="M12 24c4 3 13 3 18-1" fill="none" stroke="#4a2408" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
-    </svg>`;
 
   /* ------------------------------------------------------------------ *
    * Shadow DOM 骨架
@@ -379,7 +260,14 @@
   wrap.innerHTML = `
     <div class="my-dock" id="dock">
       <div class="my-stage" id="stage"></div>
-      <div class="my-hit" id="hit" role="button" aria-label="木鱼：单击敲击，拖动可移动或抛出"></div>
+      <div
+        class="my-hit"
+        id="hit"
+        role="button"
+        tabindex="0"
+        aria-label="木鱼：单击敲击，拖动可移动或抛出；键盘可用回车或空格敲击，方向键移动"
+        aria-keyshortcuts="Enter Space"
+      ></div>
       <div class="my-tools" id="tools">
         <button class="my-btn" id="setBtn" type="button" title="设置" aria-label="设置" aria-expanded="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -414,8 +302,8 @@
           <div class="my-set-group">
             <div class="my-set-title">敲击</div>
             <div class="my-set-line">
-              <span>静音</span>
-              <button class="my-switch" id="soundSwitch" type="button" role="switch" aria-checked="false" aria-label="静音"><i></i></button>
+              <span>声音</span>
+              <button class="my-switch" id="soundSwitch" type="button" role="switch" aria-checked="true" aria-label="声音"><i></i></button>
             </div>
             <div class="my-set-line">
               <span>自动敲击</span>
@@ -465,8 +353,12 @@
               <span>点卡片上的文字即可修改</span>
               <button class="my-link" id="copyReset" type="button">恢复默认</button>
             </div>
-            <button class="my-save" id="saveCard" type="button">保存功德卡</button>
           </div>
+        </div>
+
+        <!-- 底部固定操作条：面板内容会滚动，但保存按钮永远露在外面 -->
+        <div class="my-set-foot">
+          <button class="my-save" id="saveCard" type="button">保存功德卡</button>
         </div>
       </div>
     </div>
@@ -543,17 +435,37 @@
   };
   const fmtNum = (n) => Number(n || 0).toLocaleString('zh-CN');
 
-  let stats = {
-    total: 0,
-    today: 0,
-    todayDate: todayKey(),
-    streak: 0,
-    lastDate: '',
-    goal: GOAL,
-    savedAt: 0
-  };
+  /* ------------------------------------------------------------------ *
+   * 功德数据层：G-Counter 合并，避免多标签页 / 跨设备丢计数
+   * ------------------------------------------------------------------ *
+   * 合并算法在 stats.js（纯函数、可被 Node 单测）。这里负责：
+   *   · 生成会话分量 ID（每个标签页一个）
+   *   · storage 读写 + onChanged 合并（local + sync 都监听）
+   *   · 节流写回，避免 storage 配额被打爆
+   * ------------------------------------------------------------------ */
+  const Stats = window.MuyuStats;
+  const sessionId = (() => {
+    // 一个标签页一个 ID，存在 sessionStorage 里以防刷新后重复计数
+    try {
+      let id = sessionStorage.getItem('muyu-session');
+      if (!id) {
+        id = 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+        sessionStorage.setItem('muyu-session', id);
+      }
+      return id;
+    } catch (err) {
+      return 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    }
+  })();
+
+  let stats = Stats.makeInitial(GOAL, todayKey());
   let statsSaveTimer = 0;
   let syncTimer = 0;
+  // 防止 onChanged 合并后再次写回造成死循环。
+  // 注意：不能用 sync.set 的回调来复位——未登录账号时 sync 写入会失败，
+  // 回调可能不触发，标志会永远卡在 true，导致后续所有远程更新被忽略。
+  let applyingRemote = false;
+  let applyingRemoteTimer = 0;
 
   const statsArea = (name) => {
     try {
@@ -586,6 +498,7 @@
       return;
     }
     try {
+      // 写回前打标，避免自己的写触发 onChanged 再合并一次
       area.set({ [STATS_KEY]: value }, () => {
         const failed = !!(chrome.runtime && chrome.runtime.lastError);
         if (cb) cb(!failed);
@@ -593,41 +506,6 @@
     } catch (err) {
       if (cb) cb(false);
     }
-  }
-
-  /** 存档容错：任何脏数据都退回安全值，避免一处坏数据让计数变 NaN */
-  function normalizeStats(raw) {
-    if (!raw || typeof raw !== 'object') return null;
-    const count = (v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
-    const date = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '');
-    return {
-      total: count(raw.total),
-      today: count(raw.today),
-      todayDate: date(raw.todayDate),
-      streak: count(raw.streak),
-      lastDate: date(raw.lastDate),
-      goal: Number.isFinite(raw.goal) && raw.goal > 0 ? Math.floor(raw.goal) : GOAL,
-      savedAt: Number.isFinite(raw.savedAt) ? raw.savedAt : 0
-    };
-  }
-
-  /** 合并两份存档（本地 / 云端）：计数器取较大值，日期取较新值 */
-  function mergeStats(a, b) {
-    if (!a) return b;
-    if (!b) return a;
-    const todayDate = a.todayDate > b.todayDate ? a.todayDate : b.todayDate;
-    const lastDate = a.lastDate > b.lastDate ? a.lastDate : b.lastDate;
-    const streak =
-      a.lastDate === b.lastDate ? Math.max(a.streak, b.streak) : a.lastDate > b.lastDate ? a.streak : b.streak;
-    return {
-      total: Math.max(a.total, b.total),
-      today: Math.max(a.todayDate === todayDate ? a.today : 0, b.todayDate === todayDate ? b.today : 0),
-      todayDate,
-      lastDate,
-      streak,
-      goal: a.savedAt >= b.savedAt ? a.goal : b.goal,
-      savedAt: Math.max(a.savedAt, b.savedAt)
-    };
   }
 
   /** 连续天数：最近一次敲击在今天或昨天才算仍然连续 */
@@ -674,22 +552,14 @@
     if (!settingsEl.hidden && !cardSlot.querySelector('.is-editing')) renderCardPreview();
   }
 
+  let statsLoaded = false; // 存档加载完成前不接受敲击，避免默认态计数被随后到来的存档覆盖
+
   function recordKnock() {
-    const t = todayKey();
-    const y = shiftDayKey(-1);
-    if (stats.todayDate !== t) {
-      stats.todayDate = t;
-      stats.today = 0;
-    }
-    if (stats.lastDate !== t) {
-      stats.streak = stats.lastDate === y ? stats.streak + 1 : 1;
-      stats.lastDate = t;
-    }
-    stats.total += 1;
-    stats.today += 1;
-    stats.savedAt = Date.now();
+    if (!statsLoaded) return false;
+    Stats.applyKnock(stats, sessionId, todayKey(), shiftDayKey(-1), Date.now());
     updateStatsUI();
     saveStats();
+    return true;
   }
 
   function saveStats() {
@@ -728,7 +598,12 @@
       const done = () => {
         pending -= 1;
         if (pending > 0) return;
-        const merged = mergeStats(normalizeStats(local), normalizeStats(cloud));
+        // 关键：把「当前内存态」也作为一路输入。
+        // 否则页面隐藏期间敲的几下（350ms 节流还没写回 storage）会在
+        // visibilitychange 主动 loadStats 时被 storage 的旧值覆盖掉。
+        // G-Counter 的 max 合并保证三路增量都不会丢。
+        const disk = Stats.merge(Stats.normalize(local, GOAL), Stats.normalize(cloud, GOAL));
+        const merged = statsLoaded ? Stats.merge(stats, disk) : disk;
         if (merged) stats = merged;
         rollStats();
         resolve();
@@ -744,23 +619,50 @@
     });
   }
 
-  /** 另一台设备改了数据：取合并结果刷新界面 */
+  /**
+   * 监听 storage 变化做合并。
+   * 关键：local 和 sync 都要监听——之前只听 sync，导致同一浏览器多标签页
+   * 互相覆盖本地计数（每个标签页持有一份内存 stats，整对象覆盖写）。
+   */
   function watchStatsSync() {
     try {
-      if (!statsArea('sync') || !chrome.storage.onChanged) return;
+      if (!chrome.storage || !chrome.storage.onChanged) return;
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (area !== 'sync' || !changes[STATS_KEY]) return;
-        const incoming = normalizeStats(changes[STATS_KEY].newValue);
+        if (area !== 'local' && area !== 'sync') return;
+        const change = changes[STATS_KEY];
+        if (!change || applyingRemote) return;
+
+        const incoming = Stats.normalize(change.newValue, GOAL);
         if (!incoming) return;
-        const merged = mergeStats(stats, incoming);
-        if (
-          merged.total === stats.total &&
-          merged.today === stats.today &&
-          merged.streak === stats.streak &&
-          merged.goal === stats.goal
-        )
-          return;
+        const merged = Stats.merge(stats, incoming);
+        if (Stats.sameVisible(merged, stats)) return;
+
+        // 合并结果写回内存 + local，让其它标签页也收敛到同一状态。
+        // 不在这里写 sync：sync 有自己的 4s 节流，而且未登录时写 sync 会失败。
+        applyingRemote = true;
+        if (applyingRemoteTimer) clearTimeout(applyingRemoteTimer);
+        // 兜底复位：无论 local.set 的回调是否触发，都保证标志不会永久卡住
+        applyingRemoteTimer = window.setTimeout(() => {
+          applyingRemote = false;
+          applyingRemoteTimer = 0;
+        }, 200);
+
         stats = merged;
+        if (statsSaveTimer) {
+          clearTimeout(statsSaveTimer);
+          statsSaveTimer = 0;
+        }
+        if (syncTimer) {
+          clearTimeout(syncTimer);
+          syncTimer = 0;
+        }
+        statsSet('local', stats, () => {
+          applyingRemote = false;
+          if (applyingRemoteTimer) {
+            clearTimeout(applyingRemoteTimer);
+            applyingRemoteTimer = 0;
+          }
+        });
         rollStats();
         updateStatsUI();
       });
@@ -768,6 +670,8 @@
       /* noop */
     }
   }
+
+
 
   /* ------------------------------------------------------------------ *
    * 设置面板：页面上只保留“设置 / 收起”，其余操作全部收进来
@@ -825,9 +729,12 @@
     positionPanel(settingsEl);
     dock.classList.add('is-open');
     setBtn.setAttribute('aria-expanded', 'true');
+    // 把焦点移进面板首个控件，键盘用户可以立刻 Tab/操作
+    const first = settingsEl.querySelector('button, select, input, [tabindex="0"]');
+    if (first) first.focus();
   }
 
-  function closeSettings() {
+  function closeSettings(restoreFocus) {
     if (settingsEl.hidden) return;
     // 正在改文案时先把字落下来，避免收起丢输入
     const editing = cardSlot.querySelector('.my-cv-edit.is-editing .my-cv-input');
@@ -835,14 +742,31 @@
     settingsEl.hidden = true;
     dock.classList.remove('is-open');
     setBtn.setAttribute('aria-expanded', 'false');
+    // 只有键盘路径（Escape / 切换按钮）才把焦点还给设置按钮；
+    // 鼠标点空白处收起时不要抢焦点，否则页面原本的焦点会跳走。
+    if (restoreFocus) setBtn.focus();
   }
 
   setBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (settingsEl.hidden) openSettings();
-    else closeSettings();
+    else closeSettings(true);
   });
+
+  // Escape 关闭面板并把焦点还给设置按钮（WCAG 键盘可达）
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (settingsEl.hidden || e.key !== 'Escape') return;
+      // 正在编辑文案时，Escape 由输入框自己处理（取消编辑），不要连带关面板
+      if (cardSlot.querySelector('.my-cv-edit.is-editing')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeSettings(true);
+    },
+    true
+  );
 
   // 点到别处收起面板（页面其余部分的点击不受影响）
   document.addEventListener(
@@ -1066,8 +990,14 @@
     canvas.height = CARD_H;
     const ctx = canvas.getContext('2d');
     const avatar = await loadImage(avatarDataUrl());
+    // 少数浏览器（尤其 WebKit）在 data-URL SVG → canvas 路径上解码失败。
+    // 不再静默导出一张「没有形象」的卡片——把标记传给调用方给出提示。
+    if (!avatar) {
+      drawCard(ctx, null); // 仍然画出卡片其余部分
+      return { canvas, avatarFailed: true };
+    }
     drawCard(ctx, avatar);
-    return canvas;
+    return { canvas, avatarFailed: false };
   }
 
   saveCardBtn.addEventListener('click', async (e) => {
@@ -1078,7 +1008,8 @@
     saveCardBtn.classList.add('is-busy');
     saveCardBtn.textContent = '正在生成…';
     try {
-      const canvas = await buildCard();
+      const built = await buildCard();
+      const canvas = built.canvas;
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('toBlob failed');
       const url = URL.createObjectURL(blob);
@@ -1090,7 +1021,8 @@
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 5000);
-      saveCardBtn.textContent = '已保存';
+      // 形象解码失败时卡片仍导出，但明确告诉用户少了形象，避免静默降级
+      saveCardBtn.textContent = built.avatarFailed ? '已保存（缺形象）' : '已保存';
     } catch (err) {
       saveCardBtn.textContent = '生成失败';
     }
@@ -1184,6 +1116,17 @@
     beginCopyEdit(btn);
   });
 
+  // 这些文字是 div[role=button][tabindex=0]，原生 div 上按 Enter/Space
+  // 不会触发 click——键盘用户聚焦后按回车没反应。这里显式补上。
+  cardSlot.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    const btn = e.target && e.target.closest ? e.target.closest('.my-cv-edit') : null;
+    if (!btn || btn.querySelector('input')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    beginCopyEdit(btn);
+  });
+
   copyResetBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1269,7 +1212,12 @@
     toolEl.style.setProperty('--sw-3', `${c}deg`);
     toolEl.style.setProperty('--sw-4', `${d}deg`);
 
-    hit.setAttribute('aria-label', `${subject.label}：单击敲击，拖动可移动或抛出`);
+    // 保留完整的键盘操作说明——读屏用户靠它知道回车/空格和方向键怎么用。
+    // 之前这里只写了鼠标操作，把初始 HTML 里的键盘说明覆盖掉了。
+    hit.setAttribute(
+      'aria-label',
+      `${subject.label}：单击敲击，拖动可移动或抛出；键盘用回车或空格敲击（长按连击），方向键移动`
+    );
 
     [subjectOpts, toolOpts].forEach((box) => {
       box.querySelectorAll('.my-sk-opt').forEach((btn) => {
@@ -1503,8 +1451,15 @@
     const held = performance.now() - downAt;
     const tapSlop = e.pointerType === 'touch' ? 12 : 6;
 
+    // pointercancel（系统手势 / 滚动打断）的坐标不可靠，不能拿它算速度，
+    // 否则木鱼会突然朝角落高速飞出。直接停靠到当前位置。
+    if (cancelled) {
+      park();
+      return;
+    }
+
     // 轻点（几乎没位移）→ 敲击；拖动 / 甩动一律不触发敲击
-    if (!cancelled && movedDist < tapSlop && held < 450) {
+    if (movedDist < tapSlop && held < 450) {
       knock();
       return;
     }
@@ -1535,6 +1490,13 @@
       return;
     }
 
+    // 减弱动态：不做重力下落/回弹/旋转，直接停在松手位置。
+    // 前庭功能障碍用户开启系统「减少动态效果」后不应看到完整弹跳。
+    if (reduceMotion()) {
+      park();
+      return;
+    }
+
     // 快速甩动：按松手速度抛出，进入物理模拟
     if (speed > MAX_SPEED) {
       vx = (vx / speed) * MAX_SPEED;
@@ -1553,49 +1515,160 @@
   hit.addEventListener('pointercancel', endDrag);
   hit.addEventListener('dragstart', (e) => e.preventDefault());
 
+  /* ------------------------------------------------------------------ *
+   * 键盘操作
+   * ------------------------------------------------------------------ *
+   * 挂件本体是个 div[role=button]，默认拿不到键盘焦点。这里让它可聚焦，
+   * 回车 / 空格敲一下，按住空格可以连续敲（和真的使劲敲一样），
+   * 方向键微调位置（Shift 加速），这样不用鼠标也能玩。
+   * ------------------------------------------------------------------ */
+  const KEY_REPEAT_DELAY = 380; // 按住多久开始连发
+  const KEY_REPEAT_RATE = 140; // 连发间隔
+  let keyRepeatTimer = 0;
+  let keyHoldTimer = 0;
+
+  function stopKeyRepeat() {
+    if (keyHoldTimer) {
+      clearTimeout(keyHoldTimer);
+      keyHoldTimer = 0;
+    }
+    if (keyRepeatTimer) {
+      clearInterval(keyRepeatTimer);
+      keyRepeatTimer = 0;
+    }
+  }
+
+  /** 键盘敲击：和鼠标敲击走同一条路径，只是额外给个按压反馈类 */
+  function knockByKeyboard() {
+    if (collapsed) return;
+    hit.classList.remove('is-keypress');
+    void hit.getBoundingClientRect();
+    hit.classList.add('is-keypress');
+    window.setTimeout(() => hit.classList.remove('is-keypress'), 400);
+    // 键盘敲击稍微轻一点，连按不会太吵
+    knock(0.82);
+  }
+
+  hit.addEventListener('keydown', (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+    // 方向键微调位置：可访问性上很重要，纯键盘用户没法拖动
+    const step = e.shiftKey ? 24 : 8;
+    const nudge = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (nudge) {
+      e.preventDefault();
+      st.x = clamp(st.x + nudge[0], 0, maxX());
+      st.y = clamp(st.y + nudge[1], 0, maxY());
+      posFromUser = true;
+      parked = true;
+      render();
+      save();
+      return;
+    }
+
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    e.preventDefault();
+    if (e.repeat) return; // 自己控制连发节奏，不用系统默认的
+
+    knockByKeyboard();
+
+    // 按住不放：先等一小会儿，再开始按节奏连敲
+    stopKeyRepeat();
+    keyHoldTimer = window.setTimeout(() => {
+      keyHoldTimer = 0;
+      keyRepeatTimer = window.setInterval(knockByKeyboard, KEY_REPEAT_RATE);
+    }, KEY_REPEAT_DELAY);
+  });
+
+  hit.addEventListener('keyup', (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') stopKeyRepeat();
+  });
+  hit.addEventListener('blur', stopKeyRepeat);
+
   let meritSeq = 0;
 
-  /** 木鱼上方飘出「功德+1」，连续敲击时按槽位错开，避免重叠 */
+  /**
+   * 「功德 +1」飘字
+   * ---------------------------------------------------------------------
+   * 三件事同时发生，才显得「有分量」：
+   *   ① 数字上浮 + 轻微放大后回落（弹性，不是匀速直线）
+   *   ② 起手有一道横向笔锋光扫过，像写上去的
+   *   ③ 背后一圈暖光晕炸开再收掉，把字从页面背景里「抬」出来
+   * 连击时按槽位横向错开，并且越连越快越轻，避免糊成一片。
+   */
   function spawnMerit() {
     meritSeq += 1;
+
     const el = document.createElement('span');
     el.className = 'my-merit';
-    el.textContent = `${currentSubject().verb}+1`;
     el.setAttribute('aria-hidden', 'true');
 
-    // -2 ~ 2 的槽位 + 随机抖动，保证连击时位置错开
+    // 拆成「文字」+「+1」两段：数字更大更亮，形成主次
+    const verb = currentSubject().verb;
+    el.innerHTML = `<i class="my-merit-verb">${verb}</i><b class="my-merit-num">+1</b>`;
+
+    // 槽位错开：-2..2，连击时相邻两下不会叠在同一个位置
     const slot = (meritSeq % 5) - 2;
-    const dx = slot * 13 + (Math.random() * 8 - 4);
-    const rot = Math.random() * 10 - 5;
+    // 横向错开幅度要够大：连击时字有 60px 宽，±15px 还是会糊在一起
+    const dx = slot * 26 + (Math.random() * 8 - 4);
+    const rot = Math.random() * 8 - 4;
+    const dur = 1000 + Math.random() * 200;
+
     el.style.setProperty('--dx', dx.toFixed(1) + 'px');
     el.style.setProperty('--rot', rot.toFixed(1) + 'deg');
-    el.style.setProperty('--dur', (940 + Math.random() * 180).toFixed(0) + 'ms');
-    el.style.top = (Math.random() * 12 - 2).toFixed(1) + 'px';
-    el.style.fontSize = (14 + Math.random() * 3).toFixed(1) + 'px';
+    el.style.setProperty('--dur', dur.toFixed(0) + 'ms');
+    // 纵向也给一点随机，避免五连击排成一条绝对水平线
+    el.style.top = (-10 + (meritSeq % 3) * 7 + Math.random() * 5).toFixed(1) + 'px';
+    el.style.fontSize = (15 + Math.random() * 2.4).toFixed(1) + 'px';
 
     dock.appendChild(el);
+
+    // 同屏最多 12 个，超出就把最老的立刻收掉，防止连击时 DOM 堆积
     const alive = dock.querySelectorAll('.my-merit');
-    if (alive.length > 14) alive[0].remove();
+    if (alive.length > 12) alive[0].remove();
+
+    // 任何 animationend 都移除：prefers-reduced-motion 下动画名会变成
+    // my-merit-fade，按名字判断会漏掉（虽有超时兜底，但会多活几百毫秒）。
     el.addEventListener('animationend', () => el.remove(), { once: true });
-    window.setTimeout(() => el.remove(), 2200);
+    window.setTimeout(() => el.remove(), dur + 300);
   }
 
-  /** 敲击落点的一圈涟漪：扩散淡出，强化“受力”的即时感 */
+  /**
+   * 敲击涟漪 + 冲击环
+   * 落点按皮肤数据（占对象宽高的百分比）定位，木鱼在底部、锦鲤在中部。
+   */
   function spawnRipple() {
     const [px, py] = currentSubject().impact || [50, 62];
-    const el = document.createElement('span');
-    el.className = 'my-ripple';
-    el.setAttribute('aria-hidden', 'true');
-    el.style.left = `${(4 + (px / 100) * 96).toFixed(1)}px`;
-    el.style.top = `${(4 + (py / 100) * 96).toFixed(1)}px`;
-    dock.appendChild(el);
-    el.addEventListener('animationend', () => el.remove(), { once: true });
-    window.setTimeout(() => el.remove(), 900);
+    const left = (4 + (px / 100) * 96).toFixed(1);
+    const top = (4 + (py / 100) * 96).toFixed(1);
+
+    // 内圈：贴着落点的一小圈暖光
+    const ring = document.createElement('span');
+    ring.className = 'my-ripple';
+    ring.setAttribute('aria-hidden', 'true');
+    ring.style.left = `${left}px`;
+    ring.style.top = `${top}px`;
+    dock.appendChild(ring);
+
+    // 外圈：更大更淡的一圈冲击波，把「受力」传出去
+    const wave = document.createElement('span');
+    wave.className = 'my-ripple my-ripple-wave';
+    wave.setAttribute('aria-hidden', 'true');
+    wave.style.left = `${left}px`;
+    wave.style.top = `${top}px`;
+    dock.appendChild(wave);
+
+    const clean = (el, ms) => {
+      el.addEventListener('animationend', () => el.remove(), { once: true });
+      window.setTimeout(() => el.remove(), ms);
+    };
+    clean(ring, 700);
+    clean(wave, 900);
   }
 
-  function knock() {
+  function knock(strength = 1) {
     recordKnock();
-    sound.play(1);
+    sound.play(strength, currentSubject().tone);
     spawnMerit();
     spawnRipple();
 
@@ -1707,10 +1780,18 @@
   /* ------------------------------------------------------------------ *
    * 声音开关
    * ------------------------------------------------------------------ */
+  /**
+   * 声音开关。
+   * 语义统一为「声音是否开启」：亮起 = 有声音，关闭 = 静音。
+   * 与「自动敲击」开关保持一致（都是亮起=功能开启），避免两个开关
+   * 一个正向一个反向造成误读。内部仍用 sound.muted 存储，
+   * 因为静音是默认值更稳妥（未初始化时不会突然出声）。
+   */
   function updateSoundBtn() {
-    soundSwitch.classList.toggle('is-on', !sound.muted);
-    soundSwitch.setAttribute('aria-checked', String(!sound.muted));
-    soundSwitch.setAttribute('aria-label', sound.muted ? '开启声音' : '静音');
+    const on = !sound.muted;
+    soundSwitch.classList.toggle('is-on', on);
+    soundSwitch.setAttribute('aria-checked', String(on));
+    soundSwitch.setAttribute('aria-label', on ? '声音（关闭后静音）' : '声音已关闭，开启后恢复音效');
   }
 
   soundSwitch.addEventListener('click', (e) => {
@@ -1718,7 +1799,7 @@
     e.stopPropagation();
     sound.muted = !sound.muted;
     updateSoundBtn();
-    if (!sound.muted) sound.play(0.75);
+    if (!sound.muted) sound.play(0.75, currentSubject().tone);
     save();
   });
 
@@ -1728,12 +1809,11 @@
   function setGoal(value) {
     const n = Math.round(Number(value));
     const goal = Number.isFinite(n) ? clamp(n, 1, 9999) : GOAL;
-    if (goal === stats.goal) {
-      goalInput.value = String(goal);
+    // goalTime 独立更新，不受敲击影响（见 stats.js 的说明）
+    if (!Stats.applyGoal(stats, goal, Date.now())) {
+      goalInput.value = String(stats.goal);
       return;
     }
-    stats.goal = goal;
-    stats.savedAt = Date.now();
     updateStatsUI();
     saveStats();
   }
@@ -1801,12 +1881,24 @@
     if (document.visibilityState === 'hidden') {
       flushSave();
       flushStats();
+      // 后台标签页的 setTimeout 会被浏览器节流，自动敲击会在无操作时继续计数。
+      // 与「收起」保持一致：隐藏即暂停，回来再按原状态恢复。
+      if (autoOn && autoTimer) stopAuto();
       return;
     }
-    // 回到页面时若已跨天，把今日计数归零
+
+    // 回到页面时主动拉取一次存档并合并。
+    // 原因：后台标签页可能被冻结，期间错失 chrome.storage.onChanged 事件；
+    // 只靠事件监听会导致回到前台后看到过期计数（多标签页并发时尤其明显）。
     const before = stats.todayDate;
     rollStats();
     if (before !== stats.todayDate) updateStatsUI();
+
+    loadStats().then(() => {
+      updateStatsUI();
+      // 恢复自动敲击（setAuto 会重新排拍；不立刻敲，避免切回来就响一声）
+      if (autoOn && !collapsed) scheduleAuto(autoInterval);
+    });
   });
 
   function loadState() {
@@ -1868,10 +1960,18 @@
       loadState(),
       new Promise((resolve) => window.setTimeout(() => resolve(null), 800))
     ]);
-    statsReady.then(updateStatsUI); // 数据到达后刷新，不阻塞挂件出现
-    // 等布局可用再定位（隐藏标签页 / 自动化环境下 clientWidth 可能短暂为 0）
+    statsReady.then(() => {
+      statsLoaded = true; // 存档就绪，此后敲击才会被计入
+      updateStatsUI();
+    }); // 数据到达后刷新，不阻塞挂件出现
+    // 等布局可用再定位（隐藏标签页 / 自动化环境下 clientWidth 可能短暂为 0）。
+    // 注意：requestAnimationFrame 在隐藏标签页里根本不触发，不能无限等它——
+    // 用 rAF 与 setTimeout 竞速，保证后台打开的页面也能完成初始化。
     for (let i = 0; i < 12; i++) {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await Promise.race([
+        new Promise((resolve) => requestAnimationFrame(resolve)),
+        new Promise((resolve) => window.setTimeout(resolve, 60))
+      ]);
       if (vw() > 160 && vh() > 160) break;
       await new Promise((resolve) => window.setTimeout(resolve, 60));
     }

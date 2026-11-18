@@ -104,43 +104,18 @@
   }
 }
 
-/* 敲击落点的涟漪 */
-.my-ripple {
-  position: absolute;
-  z-index: 1;
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(232, 164, 66, 0.8);
-  background: radial-gradient(circle, rgba(255, 216, 150, 0.5) 0%, rgba(255, 216, 150, 0) 68%);
-  pointer-events: none;
-  animation: my-ripple 460ms cubic-bezier(0.18, 0.7, 0.3, 1) forwards;
-  will-change: transform, opacity;
-}
-
-@keyframes my-ripple {
-  0% {
-    transform: scale(0.35);
-    opacity: 0.9;
-  }
-  100% {
-    transform: scale(2.6);
-    opacity: 0;
-  }
-}
-
 /* 敲击工具：静止角度与挥动轨迹同样来自皮肤数据 */
 .my-tool {
   position: absolute;
-  right: -6px;
-  top: 0;
-  width: 34px;
-  height: 56px;
-  transform-origin: 58% 82%;
+  /* 往内收一点，旋转后槌头才不会被视口边缘切掉 */
+  right: 2px;
+  top: 2px;
+  width: 32px;
+  height: 54px;
+  transform-origin: 56% 84%;
   transform: rotate(var(--tool-rest, -26deg));
   pointer-events: none;
-  filter: drop-shadow(0 2px 2px rgba(40, 18, 4, 0.25));
+  filter: drop-shadow(0 2px 3px rgba(40, 18, 4, 0.32));
 }
 
 .my-tool.is-swing {
@@ -172,42 +147,127 @@
   left: 50%;
   top: 0;
   z-index: 3;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
   margin: 0;
-  padding: 0;
+  padding: 0 2px;
   white-space: nowrap;
   pointer-events: none;
   font-family: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif SC', serif;
   font-weight: 700;
-  font-size: 15px;
   line-height: 1;
   letter-spacing: 0.5px;
-  color: #9c5a1c;
-  text-shadow: 0 0 3px rgba(255, 250, 240, 0.95), 0 1px 0 #fff8ec,
-    0 3px 8px rgba(74, 36, 8, 0.28);
-  animation: my-merit-rise var(--dur, 1000ms) cubic-bezier(0.18, 0.7, 0.3, 1) forwards;
+  color: #ffd98e;
+  /*
+   * 关键：浮在任意页面上，浅背景时金色会「化掉」。
+   * 用「细描边 + 亮字身 + 暖光晕」三层：描边只用来把字从背景里切出来，
+   * 太粗会像贴纸，所以压在 1px 且用半透明棕而不是纯黑。
+   */
+  -webkit-text-stroke: 1px rgba(82, 38, 8, 0.72);
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 6px rgba(255, 218, 150, 0.9),
+    0 0 18px rgba(255, 172, 72, 0.55),
+    0 1px 2px rgba(48, 18, 2, 0.45);
+  animation: my-merit-rise var(--dur, 1100ms) cubic-bezier(0.16, 0.72, 0.26, 1) forwards;
   will-change: transform, opacity;
+}
+
+/* 「功德」二字：稍小，稳 */
+.my-merit-verb {
+  font-style: normal;
+  font-size: 0.84em;
+  letter-spacing: 1px;
+  color: #ffcf7e;
+}
+
+/* 「+1」：更大更亮，是视觉主体 */
+.my-merit-num {
+  font-weight: 800;
+  font-size: 1.02em;
+  color: #fff0c8;
+  letter-spacing: 0;
 }
 
 @keyframes my-merit-rise {
   0% {
     opacity: 0;
-    transform: translate(-50%, 10px) scale(0.85) rotate(var(--rot, 0deg));
+    transform: translate(-50%, 6px) scale(0.7) rotate(var(--rot, 0deg));
   }
-  16% {
+  /* 起手：迅速弹到位，略微过冲 */
+  14% {
     opacity: 1;
-    transform: translate(calc(-50% + var(--dx, 0px) * 0.3), -6px) scale(1)
+    transform: translate(calc(-50% + var(--dx, 0px) * 0.25), -10px) scale(1.08)
       rotate(var(--rot, 0deg));
   }
-  55% {
-    opacity: 1;
-    transform: translate(calc(-50% + var(--dx, 0px) * 0.55), -26px) scale(1.02)
+  28% {
+    transform: translate(calc(-50% + var(--dx, 0px) * 0.36), -16px) scale(1)
       rotate(var(--rot, 0deg));
   }
+  /* 中段：匀速上浮，保持亮度 */
+  62% {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--dx, 0px) * 0.7), -38px) scale(1.01)
+      rotate(var(--rot, 0deg));
+  }
+  /* 收尾：淡出时再放大一点点，视线会跟着走 */
   100% {
     opacity: 0;
-    transform: translate(calc(-50% + var(--dx, 0px)), -54px) scale(1.05)
+    transform: translate(calc(-50% + var(--dx, 0px)), -62px) scale(1.1)
       rotate(var(--rot, 0deg));
   }
+}
+
+/* ---------------- 敲击涟漪 ---------------- */
+
+.my-ripple {
+  position: absolute;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border-radius: 50%;
+  border: 1.4px solid rgba(255, 198, 110, 0.85);
+  background: radial-gradient(circle, rgba(255, 226, 168, 0.55) 0%, rgba(255, 226, 168, 0) 68%);
+  pointer-events: none;
+  animation: my-ripple 520ms cubic-bezier(0.16, 0.72, 0.26, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes my-ripple {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* 外圈冲击波：更大、更淡、更慢，负责把力「传出去」 */
+.my-ripple-wave {
+  border-width: 1px;
+  border-color: rgba(255, 214, 150, 0.42);
+  background: none;
+  animation-duration: 760ms;
+  animation-timing-function: cubic-bezier(0.1, 0.6, 0.3, 1);
+}
+
+@keyframes my-ripple-wave-kf {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(3.6);
+    opacity: 0;
+  }
+}
+
+.my-ripple-wave {
+  animation-name: my-ripple-wave-kf;
 }
 
 /* ---------------- 悬浮小按钮 ---------------- */
@@ -242,8 +302,9 @@
 }
 
 .my-btn {
-  width: 20px;
-  height: 20px;
+  /* WCAG 2.2 SC 2.5.8：触控目标至少 24×24px（原 20px 不达标） */
+  width: 24px;
+  height: 24px;
   padding: 0;
   margin: 0;
   border: 0;
@@ -280,8 +341,8 @@
 
 .my-btn svg {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 /* ---------------- 收起后的圆形入口 ---------------- */
@@ -319,39 +380,99 @@
   height: 30px;
 }
 
+/* ---------------- 键盘可达性 ---------------- */
+
+/*
+ * 挂件是浮在别人页面上的，系统聚焦环往往被页面样式冲掉，
+ * 所以自己画一套：2px 金色描边 + 外扩光晕，深浅背景下都看得见。
+ */
+.my-hit:focus-visible,
+.my-tab:focus-visible,
+.my-btn:focus-visible,
+.my-sk-opt:focus-visible,
+.my-switch:focus-visible,
+.my-select:focus-visible,
+.my-num:focus-visible,
+.my-link:focus-visible,
+.my-save:focus-visible,
+.my-cv-edit:focus-visible {
+  outline: 2px solid #f0a94a;
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+/* 木鱼本体是 div[role=button]，聚焦时给一圈贴体光圈，而不是方块描边 */
+.my-hit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 214, 150, 0.95), 0 0 16px 4px rgba(255, 176, 66, 0.55);
+}
+
+/* 键盘按下时给一个「按下去」的即时反馈（触屏/鼠标有各自的形变，不冲突） */
+.my-hit.is-keypress .my-subject {
+  animation: my-hit 380ms cubic-bezier(0.22, 0.9, 0.32, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .my-subject.is-hit,
   .my-tool.is-swing,
-  .my-ripple {
+  .my-hit.is-keypress .my-subject,
+  .my-ripple,
+  .my-ripple-wave {
     animation-duration: 1ms;
+  }
+
+  /* 飘字仍然要能看见，但完全不做位移/缩放——transform 在所有关键帧保持一致 */
+  .my-merit {
+    animation-name: my-merit-fade;
+    animation-duration: 900ms;
+  }
+
+  @keyframes my-merit-fade {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, -26px);
+    }
+    20% {
+      opacity: 1;
+      transform: translate(-50%, -26px);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -26px);
+    }
   }
 }
 
-/* ---------------- 换肤面板 ---------------- */
+/* ================================================================== *
+ * 面板系统：墨玉底 + 金线
+ * ================================================================== *
+ * 挂件会出现在任何网页上，浅米色的面板在白底页面上几乎「消失」，
+ * 而且和木鱼的深木色也不是一套语言。这里换成深墨底：
+ *   · 深色面板在浅色/深色页面上都能立住，边界靠 1px 金线交代
+ *   · 金色只用来做「激活态」和数值，不当装饰铺满
+ *   · 圆角收紧、行距压缩，252px 宽里塞得下更多信息而不拥挤
+ * ================================================================== */
 
-.my-skins {
-  position: absolute;
-  z-index: 6;
-  width: 178px;
-  padding: 8px 9px 9px;
-  border-radius: 12px;
-  background: linear-gradient(165deg, rgba(255, 253, 248, 0.98), rgba(249, 239, 224, 0.98));
-  box-shadow: 0 10px 26px rgba(58, 28, 6, 0.24), inset 0 0 0 1px rgba(140, 90, 40, 0.16);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  pointer-events: auto;
-  font-size: 11px;
-  color: #4a2a10;
+.my-settings {
+  /* 面板级 token：改配色只动这里 */
+  --pnl-bg-1: rgba(38, 30, 25, 0.97);
+  --pnl-bg-2: rgba(24, 19, 16, 0.97);
+  --pnl-line: rgba(214, 168, 106, 0.22);
+  --pnl-line-strong: rgba(214, 168, 106, 0.42);
+  --pnl-text: #e8d9c4;
+  --pnl-text-dim: #a9917090;
+  --pnl-text-soft: #b49a76;
+  --pnl-gold-1: #f2b757;
+  --pnl-gold-2: #cf8a2c;
+  --pnl-gold-text: #ffe3ab;
 }
 
-.my-skins[hidden] {
-  display: none;
-}
+/* ---------------- 形象选择（设置面板内的两组按钮） ---------------- */
 
 .my-sk-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 
 .my-sk-row + .my-sk-row {
@@ -363,7 +484,7 @@
   width: 26px;
   font-size: 10px;
   letter-spacing: 0.5px;
-  color: #8a6239;
+  color: var(--pnl-text-soft);
 }
 
 .my-sk-opts {
@@ -374,27 +495,32 @@
 
 .my-sk-opt {
   flex: 1;
-  padding: 4px 0;
+  /* 7px 上下 padding + 13px 行高 ≈ 27px，满足 24px 触控目标 */
+  padding: 7px 0;
   border: 0;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: inset 0 0 0 1px rgba(150, 100, 50, 0.2);
-  color: #6b3a12;
+  border-radius: 6px;
+  background: rgba(255, 236, 200, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(214, 168, 106, 0.18);
+  color: #c9b191;
   font-family: inherit;
   font-size: 11px;
   line-height: 1.2;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .my-sk-opt:hover {
-  background: #fff;
+  background: rgba(255, 236, 200, 0.12);
+  color: var(--pnl-text);
 }
 
 .my-sk-opt.is-on {
-  background: linear-gradient(160deg, #f0a94a 0%, #d9822b 100%);
-  color: #fffdf7;
-  box-shadow: inset 0 0 0 1px rgba(255, 226, 180, 0.55);
+  background: linear-gradient(160deg, var(--pnl-gold-1), var(--pnl-gold-2));
+  color: #3a1e05;
+  font-weight: 700;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 232, 190, 0.55),
+    0 2px 8px rgba(207, 138, 44, 0.35);
 }
 
 /* ---------------- 设置面板 ---------------- */
@@ -407,12 +533,15 @@
   display: flex;
   flex-direction: column;
   border-radius: 14px;
-  background: linear-gradient(165deg, rgba(255, 253, 248, 0.985), rgba(249, 239, 224, 0.985));
-  box-shadow: 0 14px 34px rgba(58, 28, 6, 0.26), inset 0 0 0 1px rgba(140, 90, 40, 0.16);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: linear-gradient(170deg, var(--pnl-bg-1), var(--pnl-bg-2));
+  box-shadow:
+    0 18px 44px rgba(10, 5, 2, 0.58),
+    0 0 0 1px var(--pnl-line),
+    inset 0 1px 0 rgba(255, 224, 178, 0.09);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   pointer-events: auto;
-  color: #4a2a10;
+  color: var(--pnl-text);
   font-size: 11px;
   overflow: hidden;
 }
@@ -426,28 +555,34 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding: 9px 12px 7px;
-  border-bottom: 1px solid rgba(150, 100, 50, 0.13);
+  padding: 11px 13px 9px;
+  border-bottom: 1px solid var(--pnl-line);
+  /* 顶部一道极淡的暖光，让面板不是一块死黑 */
+  background: linear-gradient(180deg, rgba(255, 196, 108, 0.08), rgba(255, 196, 108, 0));
 }
 
 .my-set-name {
-  font-size: 11.5px;
+  font-family: 'Songti SC', 'STSong', 'SimSun', serif;
+  font-size: 12.5px;
   font-weight: 700;
-  letter-spacing: 1.6px;
-  color: #8a5a25;
+  letter-spacing: 2px;
+  color: var(--pnl-gold-text);
+  text-shadow: 0 0 10px rgba(242, 183, 87, 0.35);
 }
 
 .my-set-date {
   font-size: 9.5px;
-  letter-spacing: 0.3px;
-  color: #ab8a66;
+  letter-spacing: 0.4px;
+  color: var(--pnl-text-soft);
+  font-variant-numeric: tabular-nums;
 }
 
 .my-set-body {
-  padding: 8px 11px 10px;
+  padding: 10px 12px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+  scrollbar-color: rgba(214, 168, 106, 0.3) transparent;
 }
 
 .my-set-body::-webkit-scrollbar {
@@ -456,20 +591,35 @@
 
 .my-set-body::-webkit-scrollbar-thumb {
   border-radius: 3px;
-  background: rgba(150, 100, 50, 0.26);
+  background: rgba(214, 168, 106, 0.28);
+}
+
+.my-set-body::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .my-set-group + .my-set-group {
-  margin-top: 9px;
-  padding-top: 9px;
-  border-top: 1px dashed rgba(150, 100, 50, 0.2);
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(214, 168, 106, 0.12);
 }
 
+/* 分组标题：加一道短线做「章节」暗示 */
 .my-set-title {
-  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
   font-size: 9.5px;
-  letter-spacing: 1.3px;
-  color: #b08a5f;
+  letter-spacing: 1.6px;
+  color: var(--pnl-text-soft);
+}
+
+.my-set-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(214, 168, 106, 0.22), transparent);
 }
 
 .my-set-line {
@@ -477,9 +627,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 3.5px 0;
+  padding: 4.5px 0;
   font-size: 11px;
-  color: #5c3413;
+  color: #d8c7b0;
 }
 
 /* 开关 */
@@ -487,35 +637,41 @@
 .my-switch {
   position: relative;
   flex: none;
-  width: 30px;
-  height: 17px;
+  /* 高度提到 24px 满足 WCAG 2.2 触控目标；宽度相应加长保持比例 */
+  width: 40px;
+  height: 24px;
   padding: 0;
   margin: 0;
   border: 0;
-  border-radius: 9px;
-  background: rgba(150, 105, 55, 0.26);
+  border-radius: 12px;
+  background: rgba(255, 236, 200, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(214, 168, 106, 0.2);
   cursor: pointer;
-  transition: background 0.16s ease;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .my-switch i {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 13px;
-  height: 13px;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: #fffdf8;
-  box-shadow: 0 1px 2px rgba(60, 30, 8, 0.35);
-  transition: transform 0.16s ease;
+  background: #7a6550;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  transition: transform 0.18s cubic-bezier(0.3, 0.9, 0.4, 1), background 0.18s ease;
 }
 
 .my-switch.is-on {
-  background: linear-gradient(160deg, #f0a94a 0%, #d9822b 100%);
+  background: linear-gradient(160deg, var(--pnl-gold-1), var(--pnl-gold-2));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 232, 190, 0.4),
+    0 0 10px rgba(242, 183, 87, 0.3);
 }
 
 .my-switch.is-on i {
-  transform: translateX(13px);
+  transform: translateX(16px);
+  background: #fff6e2;
 }
 
 /* 下拉与数字 */
@@ -523,41 +679,63 @@
 .my-select {
   flex: none;
   max-width: 116px;
-  padding: 3px 4px;
+  padding: 4px 6px;
   border: 0;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow: inset 0 0 0 1px rgba(150, 100, 50, 0.22);
+  border-radius: 6px;
+  /* 深色面板里原生 select 会跟着系统走，这里强制深底浅字 */
+  background: rgba(255, 236, 200, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(214, 168, 106, 0.2);
   font-family: inherit;
   font-size: 10.5px;
-  color: #6b3a12;
+  color: #e6d3b8;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 18px;
+  /* 自绘下拉箭头，避免原生箭头在深底上发黑 */
+  background-image: linear-gradient(45deg, transparent 50%, #c9a878 50%),
+    linear-gradient(135deg, #c9a878 50%, transparent 50%);
+  background-position: calc(100% - 10px) 50%, calc(100% - 6px) 50%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+
+.my-select option {
+  background: #241c17;
+  color: #e8d9c4;
 }
 
 .my-num-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .my-num {
-  width: 54px;
-  padding: 3px 6px;
+  width: 56px;
+  padding: 4px 7px;
   border: 0;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow: inset 0 0 0 1px rgba(150, 100, 50, 0.22);
+  border-radius: 6px;
+  background: rgba(255, 236, 200, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(214, 168, 106, 0.2);
   font-family: inherit;
   font-size: 11px;
   font-weight: 700;
-  color: #8c4f12;
+  color: var(--pnl-gold-text);
   text-align: right;
   font-variant-numeric: tabular-nums;
+  transition: box-shadow 0.16s ease;
+}
+
+.my-num:hover {
+  box-shadow: inset 0 0 0 1px rgba(214, 168, 106, 0.36);
 }
 
 .my-num:focus {
   outline: none;
-  box-shadow: inset 0 0 0 1px rgba(217, 130, 43, 0.7), 0 0 0 2px rgba(240, 169, 74, 0.2);
+  box-shadow:
+    inset 0 0 0 1px rgba(242, 183, 87, 0.8),
+    0 0 0 2px rgba(242, 183, 87, 0.18);
 }
 
 .my-num::-webkit-outer-spin-button,
@@ -569,8 +747,9 @@
 .my-num-wrap em {
   font-style: normal;
   font-size: 10px;
-  color: #a9825a;
+  color: var(--pnl-text-soft);
 }
+
 
 /* ---------------- 功德数据 ---------------- */
 
@@ -595,17 +774,17 @@
 
 .my-ring-bg {
   fill: none;
-  stroke: rgba(170, 120, 60, 0.16);
+  stroke: rgba(214, 168, 106, 0.14);
   stroke-width: 5.5;
 }
 
 .my-ring-fg {
   fill: none;
-  stroke: #de9536;
+  stroke: var(--pnl-gold-1, #f2b757);
   stroke-width: 5.5;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.32s ease, stroke 0.2s ease;
-  filter: drop-shadow(0 1px 1.5px rgba(180, 110, 20, 0.35));
+  filter: drop-shadow(0 0 5px rgba(242, 183, 87, 0.45));
 }
 
 .my-sp-center {
@@ -619,18 +798,19 @@
 }
 
 .my-sp-center b {
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1;
   font-weight: 700;
-  color: #8c4f12;
+  color: var(--pnl-gold-text, #ffe3ab);
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 10px rgba(242, 183, 87, 0.35);
 }
 
 .my-sp-center i {
   font-style: normal;
   font-size: 8.5px;
   line-height: 1;
-  color: #ad8b64;
+  color: var(--pnl-text-soft, #b49a76);
   font-variant-numeric: tabular-nums;
 }
 
@@ -644,10 +824,10 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 6px;
-  padding: 3px 1px;
-  border-top: 1px dashed rgba(150, 100, 50, 0.16);
+  padding: 3.5px 1px;
+  border-top: 1px solid rgba(214, 168, 106, 0.12);
   font-size: 10px;
-  color: #8a6239;
+  color: var(--pnl-text-soft, #b49a76);
   white-space: nowrap;
 }
 
@@ -656,30 +836,33 @@
 }
 
 .my-sp-row b {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  color: #6b3a12;
+  color: #f0dcc0;
   font-variant-numeric: tabular-nums;
 }
 
 .my-sp-hint {
-  margin-top: 5px;
+  margin-top: 6px;
   text-align: center;
   font-size: 9.5px;
-  letter-spacing: 0.2px;
-  color: #ab8a66;
+  letter-spacing: 0.4px;
+  color: var(--pnl-text-soft, #b49a76);
 }
 
+/* 达标态：整块转成更亮的金，并有轻微呼吸光 */
 .my-settings.is-done .my-ring-fg {
-  stroke: #e9a52a;
+  stroke: #ffd070;
+  filter: drop-shadow(0 0 8px rgba(255, 208, 112, 0.75));
 }
 
 .my-settings.is-done .my-sp-center b {
-  color: #b4720f;
+  color: #ffe9b8;
 }
 
 .my-settings.is-done .my-sp-hint {
-  color: #b4720f;
+  color: var(--pnl-gold-text, #ffe3ab);
+  font-weight: 700;
 }
 
 /* ---------------- 功德卡预览（文案可点改） ---------------- */
@@ -694,10 +877,15 @@
 
 .my-cv-paper {
   position: relative;
-  padding: 9px 8px 8px;
-  border-radius: 7px;
+  padding: 10px 9px 9px;
+  border-radius: 8px;
+  /* 卡片本身就是「宣纸」，导出图也是这套底，所以这里保持浅色，
+     但在深色面板里要给它一圈金边 + 更强的投影，才不会像一块浮着的白 */
   background: linear-gradient(160deg, #fffdf7 0%, #fdf4e4 55%, #f6e6cb 100%);
-  box-shadow: inset 0 0 0 1px rgba(150, 100, 46, 0.28), 0 3px 10px rgba(90, 50, 10, 0.12);
+  box-shadow:
+    0 0 0 1px rgba(214, 168, 106, 0.35),
+    0 6px 18px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(150, 100, 46, 0.24);
   text-align: center;
   color: #6b3a12;
   overflow: hidden;
@@ -723,18 +911,23 @@
   transition: background 0.14s ease, box-shadow 0.14s ease;
 }
 
-.my-cv-edit:hover,
-.my-cv-edit:focus-visible {
-  outline: none;
+.my-cv-edit:hover {
   background: rgba(240, 169, 74, 0.18);
   box-shadow: inset 0 0 0 1px rgba(217, 130, 43, 0.32);
+}
+
+/* 键盘焦点：2px 高对比实线（WCAG 2.4.11 / 1.4.11），不能用半透明内阴影代替 */
+.my-cv-edit:focus-visible {
+  outline: 2px solid #b45309;
+  outline-offset: 1px;
+  background: rgba(240, 169, 74, 0.22);
 }
 
 .my-cv-title {
   display: block;
   margin: 0 auto;
   font-family: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif SC', serif;
-  font-size: 19px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: 6px;
@@ -757,16 +950,16 @@
 
 .my-cv-av {
   display: block;
-  width: 58%;
-  margin: 4px auto 2px;
+  width: 46%;
+  margin: 3px auto 1px;
   pointer-events: none;
 }
 
 .my-cv-ring {
   position: relative;
-  width: 88px;
-  height: 88px;
-  margin: 2px auto 4px;
+  width: 74px;
+  height: 74px;
+  margin: 1px auto 3px;
   border-radius: 50%;
   background: conic-gradient(#e8a94f var(--pct, 0%), rgba(170, 118, 58, 0.14) 0);
   display: flex;
@@ -889,8 +1082,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 卡片内联输入框：必须有可见焦点环，否则用户打字时不知道焦点在哪 */
 .my-cv-input:focus {
-  outline: none;
+  outline: 2px solid #d9822b;
+  outline-offset: 1px;
+  background: rgba(255, 248, 232, 0.9);
 }
 
 .my-copy-bar {
@@ -898,50 +1094,62 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 7px;
   font-size: 9px;
-  color: #ab8a66;
+  color: var(--pnl-text-soft, #b49a76);
 }
 
 .my-link {
   flex: none;
-  padding: 0;
+  padding: 2px 0;
   margin: 0;
   border: 0;
   background: none;
   font-family: inherit;
   font-size: 9.5px;
-  color: #b4720f;
+  color: var(--pnl-gold-text, #ffe3ab);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
+  transition: color 0.15s ease;
 }
 
 .my-link:hover {
-  color: #d9822b;
+  color: #fff0c8;
 }
 
 /* ---------------- 保存功德卡 ---------------- */
 
+/* 底部固定条：滚动区之外，永远可见 */
+.my-set-foot {
+  flex: none;
+  padding: 9px 12px 11px;
+  border-top: 1px solid rgba(214, 168, 106, 0.14);
+  background: linear-gradient(0deg, rgba(255, 196, 108, 0.06), rgba(255, 196, 108, 0));
+}
+
 .my-save {
   display: block;
   width: 100%;
-  margin-top: 8px;
-  padding: 7px 0;
+  margin: 0;
+  padding: 8px 0;
   border: 0;
   border-radius: 8px;
-  background: linear-gradient(160deg, #f0a94a 0%, #d9822b 100%);
-  color: #fffdf7;
+  background: linear-gradient(160deg, var(--pnl-gold-1, #f2b757), var(--pnl-gold-2, #cf8a2c));
+  color: #3a1e05;
   font-family: inherit;
-  font-size: 11px;
-  letter-spacing: 1px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(180, 110, 20, 0.34), inset 0 0 0 1px rgba(255, 226, 180, 0.5);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 232, 190, 0.6),
+    0 3px 12px rgba(207, 138, 44, 0.38);
   transition: filter 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
 }
 
 .my-save:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.08);
 }
 
 .my-save:active {
