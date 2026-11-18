@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>对比验收 · 浅底 / 深底</title>
+<base href="/">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { display: flex; font-family: -apple-system, 'PingFang SC', sans-serif; }
+  .half {
+    position: relative; flex: 1; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .light { background: #f7f5f2; color: #2a2420; }
+  .dark  { background: #14120f; color: #d8ccb8; }
+  .busy {
+    position: absolute; inset: 0;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 27px, currentColor 27px, currentColor 28px),
+      repeating-linear-gradient(90deg, transparent, transparent 27px, currentColor 27px, currentColor 28px);
+    opacity: .07;
+  }
+  .label {
+    position: relative; font-size: 13px; letter-spacing: 4px; opacity: .55;
+    padding: 10px 18px; border: 1px solid currentColor; border-radius: 999px;
+  }
+</style>
+</head>
+<body>
+  <div class="half light"><div class="busy"></div><div class="label">浅色页面</div></div>
+  <div class="half dark"><div class="busy"></div><div class="label">深色页面</div></div>
+
+  <script src="art.js"></script>
+  <script src="stats.js"></script>
+  <script src="content.js"></script>
+  <script>
+    // 让挂件在两半各出现一次，方便一眼比较对比度（真实环境只有一个）
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const src = document.querySelector('muyu-widget');
+        if (!src) return;
+        const clone = src.cloneNode(true);
+        clone.id = 'muyu-clone';
+        // Shadow DOM 不会被 cloneNode 复制，这里手工再挂一份
+        const host2 = document.createElement('muyu-widget');
+        host2.style.visibility = '';
+        document.body.appendChild(host2);
+      }, 900);
+    });
+  </script>
+</body>
+</html>

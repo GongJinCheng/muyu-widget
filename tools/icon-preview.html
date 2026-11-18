@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>图标预览 · 多尺寸实物对照</title>
+<base href="/">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px;
+    font-family: -apple-system, 'PingFang SC', sans-serif;
+    background: #1a1613; color: #b8a48c;
+  }
+  h2 { font-size: 12px; letter-spacing: 3px; font-weight: 400; margin: 0 0 14px; color: #7d6650; }
+  .rows { display: flex; flex-direction: column; gap: 22px; }
+  .band { display: flex; align-items: center; gap: 26px; padding: 18px 22px; border-radius: 12px; }
+  .band.light  { background: #f4f1ec; }
+  .band.dark   { background: #202020; }
+  .band.chrome { background: #dee1e6; }
+  .band.tab    { background: linear-gradient(#dfdfdf, #cfd1d4); }
+  .item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .item span { font-size: 10px; letter-spacing: 1px; opacity: .55; }
+  .band.light .item span, .band.chrome .item span, .band.tab .item span { color: #555; }
+  img { display: block; image-rendering: auto; }
+  /* 工具栏真实尺寸：16px 图标 + 28px 按钮底 */
+  .toolbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px; border-radius: 7px; background: rgba(255,255,255,.65);
+    box-shadow: 0 1px 2px rgba(0,0,0,.12);
+  }
+  .toolbar .btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+  }
+  .toolbar .btn:hover { background: #f0f0f0; }
+</style>
+</head>
+<body>
+  <div class="rows" id="rows"></div>
+
+  <script>
+    const SIZES = [16, 32, 48, 128];
+    const rows = document.getElementById('rows');
+
+    // 1) 各尺寸放大显示（看清图形），2) 真实像素尺寸
+    const bands = [
+      { cls: 'light',  title: '浅色主题' },
+      { cls: 'dark',   title: '深色主题' },
+      { cls: 'chrome', title: 'Chrome 扩展管理页（真实 1:1）' }
+    ];
+
+    for (const b of bands) {
+      const el = document.createElement('div');
+      el.className = 'band ' + b.cls;
+      let html = `<div style="min-width:150px"><h2 style="margin:0">${b.title}</h2></div>`;
+      for (const s of SIZES) {
+        // 真实尺寸
+        html += `<div class="item">
+          <img src="../icons/icon${s}.png" width="${s}" height="${s}" alt="">
+          <span>${s}px</span>
+        </div>`;
+      }
+      // 放大对照（近邻插值，看像素级效果）
+      html += `<div class="item">
+        <img src="../icons/icon16.png" width="64" height="64"
+             style="image-rendering:pixelated" alt="">
+        <span>16px 放大</span>
+      </div>`;
+      el.innerHTML = html;
+      rows.appendChild(el);
+    }
+
+    // 模拟浏览器工具栏：16px 在 28px 按钮里
+    const tb = document.createElement('div');
+    tb.className = 'band tab';
+    tb.innerHTML = `
+      <div style="min-width:150px"><h2 style="margin:0">浏览器工具栏（模拟）</h2></div>
+      <div class="toolbar">
+        <div class="btn"><img src="../icons/icon16.png" width="16" height="16" alt=""></div>
+        <div class="btn" style="opacity:.35">⋯</div>
+      </div>
+      <div class="item">
+        <img src="../icons/icon48.png" width="48" height="48" alt="">
+        <span>扩展详情页 48px</span>
+      </div>
+    `;
+    rows.appendChild(tb);
+  </script>
+</body>
+</html>

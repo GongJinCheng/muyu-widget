@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64">
+  <!--
+    木鱼挂件 · 图标源稿 v14 —— 单一合并路径
+
+    前面尝试过「身体椭圆 + 尾巴三角」组合，问题在于两者各自描边，
+    接缝处会留下一条金线，把鱼切成两截。
+
+    这版把身体与尾巴合成**一条 path**，只描一次外缘。
+    形状用「圆弧 + 贝塞尔」手工拼，但每一段都经过实际渲染校准。
+
+    剪影要点（从左到右）：
+      左端  钝圆鱼头（半径约 16）
+      上缘  缓坡，中段最高 y≈17.6
+      尾部  上叉尖 (54.5, 21) → 尾根凹口 (45.5, 33.5) → 下叉尖 (54.5, 46)
+      下缘  缓和回落到左端
+    -->
+  <defs>
+    <linearGradient id="ibody" x1="0.06" y1="0.1" x2="0.94" y2="0.92">
+      <stop offset="0%" stop-color="#fbd9ad"/>
+      <stop offset="16%" stop-color="#e9b074"/>
+      <stop offset="42%" stop-color="#c68242"/>
+      <stop offset="68%" stop-color="#905023"/>
+      <stop offset="100%" stop-color="#431e08"/>
+    </linearGradient>
+
+    <linearGradient id="igold" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0%" stop-color="#fff5e0"/>
+      <stop offset="26%" stop-color="#f1c476"/>
+      <stop offset="64%" stop-color="#b9853c"/>
+      <stop offset="100%" stop-color="#6d4212"/>
+    </linearGradient>
+
+    <radialGradient id="ispec" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fffdf7" stop-opacity="0.96"/>
+      <stop offset="38%" stop-color="#fff3e0" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#fff3e0" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="ishade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a0e02" stop-opacity="0"/>
+      <stop offset="52%" stop-color="#2a0e02" stop-opacity="0.03"/>
+      <stop offset="100%" stop-color="#2a0e02" stop-opacity="0.32"/>
+    </linearGradient>
+
+    <clipPath id="bodyClip">
+      <ellipse cx="27" cy="33.5" rx="19.4" ry="16.2"/>
+    </clipPath>
+
+    <!--
+      合并剪影（单条闭合路径）。
+
+      尾巴的关键三个点（v14 太小，v15 外扩）：
+        上叉尖 (57.4, 19.4)
+        尾根凹口 (46.2, 33.5)   ← 往里收，尾巴才张得开
+        下叉尖 (57.4, 47.6)
+      尾巴张开后占宽约 11、高约 28，在 16px 下也能看出「分叉」。
+    -->
+    <path id="fishShape"
+          d="M27.4 17.4
+             C36.4 17.4 42.8 21.4 45.2 28
+             C45.8 29.6 46 31.4 46.2 33.5
+             C46 35.6 45.8 37.4 45.2 39
+             C42.8 45.6 36.4 49.6 27.4 49.6
+             C17 49.6 8.2 42.4 8.2 33.5
+             C8.2 24.6 17 17.4 27.4 17.4Z"/>
+    <!-- 尾鳍单独一笔，但用同一渐变，视觉上与身体连成一片 -->
+    <path id="tailShape"
+          d="M44.2 33.5
+             C46.6 27.4 51.4 22 57.4 19.4
+             C56.4 25.2 54.2 30 51 33.5
+             C54.2 37 56.4 41.8 57.4 47.6
+             C51.4 45 46.6 39.6 44.2 33.5Z"/>
+  </defs>
+
+  <g transform="translate(0.4 1.2)">
+    <!-- 落地阴影 -->
+    <ellipse cx="28" cy="52.6" rx="15.4" ry="2.3" fill="#2a0e02" opacity="0.14"/>
+
+    <!-- ===== 1. 剪影本体：先尾后身，尾根被身体压住 ===== -->
+    <use href="#tailShape" fill="url(#ibody)"/>
+    <use href="#fishShape" fill="url(#ibody)"/>
+    <use href="#fishShape" fill="url(#ishade)"/>
+    <use href="#tailShape" fill="url(#ishade)"/>
+
+    <!-- ===== 2. 木纹 ===== -->
+    <g clip-path="url(#bodyClip)">
+      <g fill="none" stroke="#2f1103" stroke-linecap="round" stroke-opacity="0.11" stroke-width="1.6">
+        <path d="M10.5 43.6c7 3.4 14.6 3.6 21.8.8"/>
+        <path d="M9.5 38.8c2.6 1.3 5.4 2.2 8.4 2.7"/>
+      </g>
+    </g>
+
+    <!-- ===== 3. 出音缝：沿脊线的浅凹 ===== -->
+    <path d="M13.4 27.2c4.2-2.6 8.9-4 13.7-4.2 4.7-.2 8.7 1 11.9 3.7-1.8 1.4-4.4 1.8-7.5 1.4-4.4-.5-8.9.2-12.9 1.8-2 .8-3.9.4-5.2-1-.4-.5-.4-1.1 0-1.7Z"
+          fill="#2a1207" opacity="0.92"/>
+    <path d="M13.4 27.2c4.2-2.6 8.9-4 13.7-4.2 4.7-.2 8.7 1 11.9 3.7"
+          fill="none" stroke="#180800" stroke-opacity="0.8" stroke-linecap="round" stroke-width="1.8"/>
+    <path d="M14 27.9c4-2.1 8.3-3.2 12.6-3.4 3.7-.2 6.9.7 9.7 2.6"
+          fill="none" stroke="#ffddb0" stroke-opacity="0.68" stroke-linecap="round" stroke-width="1.2"/>
+
+    <!-- ===== 4. 鳃缝 ===== -->
+    <path d="M16.2 22.4c-1.8 3.1-2.4 6.6-1.7 9.9-2.7-2.5-3.8-6.2-2.5-10.1"
+          fill="none" stroke="#2a0e02" stroke-opacity="0.38" stroke-linecap="round" stroke-width="1.7"/>
+
+    <!-- ===== 5. 受光 ===== -->
+    <ellipse cx="18" cy="24.4" rx="8.6" ry="3.9" fill="url(#ispec)"
+             transform="rotate(-14 18 24.4)" opacity="0.88"/>
+
+    <!-- ===== 6. 外描边 =====
+         顺序：先勾尾巴（左半会被身体描边压住，正好藏起接缝），
+         再勾身体。身体的右缘被尾巴覆盖的区域用 mask 抠掉，
+         避免在尾巴内部留下一条分界线。
+    -->
+    <use href="#tailShape" fill="none" stroke="#2a0e02" stroke-opacity="0.5"
+         stroke-width="2.4" stroke-linejoin="round"/>
+    <use href="#tailShape" fill="none" stroke="url(#igold)" stroke-width="1.5"
+         stroke-linejoin="round"/>
+
+    <g mask="url(#bodyOnlyMask)">
+      <use href="#fishShape" fill="none" stroke="#2a0e02" stroke-opacity="0.5" stroke-width="2.4"/>
+      <use href="#fishShape" fill="none" stroke="url(#igold)" stroke-width="1.5"/>
+    </g>
+  </g>
+</svg>

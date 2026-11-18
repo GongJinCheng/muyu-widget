@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>木鱼挂件 · 预览台</title>
+<!-- 预览页在 tools/ 下，但 content.js 里的 styles.css 是相对“文档”解析的，
+     所以用 base 把相对路径锚回仓库根目录，模拟真实扩展里的 chrome.runtime.getURL -->
+<base href="/">
+<style>
+  /* 模拟一个“普通网页”，用来检查挂件在宿主页面上的观感与遮挡 */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #22242a;
+    background: #f6f7f9;
+    background-image:
+      radial-gradient(circle at 18% 12%, rgba(90, 130, 200, .10), transparent 46%),
+      radial-gradient(circle at 82% 78%, rgba(200, 120, 90, .10), transparent 44%);
+    padding: 48px 56px;
+  }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -.4px; }
+  p  { color: #5d636e; line-height: 1.75; max-width: 560px; }
+  .card {
+    margin-top: 26px; padding: 20px 22px; max-width: 460px;
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(20,26,40,.08), 0 8px 24px rgba(20,26,40,.06);
+  }
+  .card h2 { font-size: 15px; margin: 0 0 10px; }
+  .row { height: 10px; border-radius: 6px; background: #eceef2; margin: 9px 0; }
+  .row.s { width: 62%; }
+</style>
+</head>
+<body>
+  <h1>宿主页面</h1>
+  <p>这是一个普通的网页。木鱼挂件以 Shadow DOM 注入，正常情况下不该影响页面本身的排版与点击。</p>
+  <div class="card">
+    <h2>随便一张卡片</h2>
+    <div class="row"></div><div class="row s"></div><div class="row"></div>
+  </div>
+
+  <script src="../art.js"></script>
+  <script src="../stats.js"></script>
+  <script src="../content.js"></script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>美术预览 · 形象与工具</title>
+<base href="/">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px;
+    background: #14100e;
+    background-image: radial-gradient(circle at 50% -10%, #2b211a, transparent 65%);
+    font-family: -apple-system, 'Segoe UI', 'PingFang SC', sans-serif;
+    color: #cdb69c;
+  }
+  h1 { font-size: 16px; letter-spacing: 3px; font-weight: 500; margin: 0 0 24px; color: #8d7358; }
+  .grid { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+  .cell {
+    width: 260px; padding: 18px 18px 12px; border-radius: 16px;
+    background: linear-gradient(170deg, #24201c, #17130f);
+    box-shadow: inset 0 0 0 1px rgba(190, 150, 100, .12), 0 12px 30px rgba(0,0,0,.45);
+  }
+  .cell.on-light { background: linear-gradient(170deg, #fbf7f1, #efe6d8); box-shadow: inset 0 0 0 1px rgba(120,80,40,.18); }
+  .cell.on-light .cap { color: #8a7050; }
+  .stage { height: 220px; display: flex; align-items: center; justify-content: center; }
+  .stage svg { width: 200px; height: 200px; overflow: visible; }
+  .stage.small svg { width: 104px; height: 104px; }
+  .stage.tool svg { width: 120px; height: 200px; }
+  .cap { text-align: center; font-size: 11px; letter-spacing: 2px; color: #7d6650; margin-top: 4px; }
+  .strip { display: flex; gap: 10px; margin-top: 28px; }
+  .strip .stage { height: 150px; width: 150px; background: rgba(255,255,255,.03); border-radius: 12px; }
+  .strip .stage.small svg { width: 96px; height: 96px; }
+</style>
+</head>
+<body>
+  <h1>木鱼挂件 · 美术预览</h1>
+  <div class="grid" id="grid"></div>
+
+  <script src="art.js"></script>
+  <script>
+    const art = window.MuyuArt;
+    const grid = document.getElementById('grid');
+    const cells = [
+      { title: '木鱼 · 深底', svg: art.SUBJECTS.muyu.svg, cls: '' },
+      { title: '木鱼 · 浅底', svg: art.SUBJECTS.muyu.svg, cls: 'on-light' },
+      { title: '锦鲤 · 深底', svg: art.SUBJECTS.fish.svg, cls: '' },
+      { title: '锦鲤 · 浅底', svg: art.SUBJECTS.fish.svg, cls: 'on-light' },
+      { title: '木槌', svg: art.TOOLS.mallet.svg, cls: '', stage: 'tool' },
+      { title: '手', svg: art.TOOLS.hand.svg, cls: '', stage: 'tool' },
+      { title: '实际尺寸 104px', svg: art.SUBJECTS.muyu.svg, cls: '', stage: 'small' },
+      { title: '收起图标 46px', svg: art.MINI_FISH, cls: 'on-light', stage: 'small' }
+    ];
+    for (const c of cells) {
+      const el = document.createElement('div');
+      el.className = 'cell ' + c.cls;
+      el.innerHTML = `<div class="stage ${c.stage || ''}">${c.svg}</div><div class="cap">${c.title}</div>`;
+      grid.appendChild(el);
+    }
+  </script>
+</body>
+</html>

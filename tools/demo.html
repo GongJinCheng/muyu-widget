@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>木鱼挂件 · 本地演示</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 72px 8vw;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #23262b;
+    background: #f7f6f3;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(120,150,190,.10), transparent 42%),
+      radial-gradient(circle at 88% 92%, rgba(210,150,90,.10), transparent 46%);
+  }
+  .wrap { max-width: 720px; }
+  .brand { font-size: 12px; letter-spacing: 3px; color: #9a9da4; margin-bottom: 40px; }
+  h1 { font-size: 40px; line-height: 1.35; margin: 0 0 20px; letter-spacing: -1px; }
+  .lede { font-size: 16px; line-height: 1.9; color: #5b6069; max-width: 600px; margin: 0 0 36px; }
+  .card {
+    background: #fff; border-radius: 16px; padding: 26px 30px; max-width: 600px;
+    box-shadow: 0 1px 3px rgba(20,26,40,.06), 0 12px 34px rgba(20,26,40,.06);
+  }
+  .card h2 { font-size: 16px; margin: 0 0 16px; }
+  .line { height: 11px; border-radius: 6px; background: #eceef2; margin: 12px 0; }
+  .line.s { width: 62%; } .line.m { width: 81%; }
+  .tag {
+    display: inline-block; margin-top: 20px; padding: 7px 14px; font-size: 12px;
+    border-radius: 999px; background: #f0efe9; color: #6b6d72;
+  }
+  .tips {
+    margin-top: 44px; max-width: 600px; padding: 22px 26px;
+    border-left: 3px solid #c8934a; background: rgba(255,255,255,.6);
+    border-radius: 0 10px 10px 0; font-size: 14px; line-height: 1.9; color: #5b5348;
+  }
+  .tips b { color: #8a5a25; }
+  kbd {
+    display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 12px;
+    background: #fff; border: 1px solid #d8d2c8; box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">LOCAL DEMO · 木鱼挂件 v2.0.0</div>
+    <h1>把一只木鱼，<br>挂在你正在看的页面上。</h1>
+    <p class="lede">敲一下，功德 +1。可以拖动，也可以甩出去——它会落地、回弹、转个圈，然后停在那里等你下次回来。全部数据只存在你自己的浏览器里。</p>
+    <div class="card">
+      <h2>今天想记点什么</h2>
+      <div class="line"></div><div class="line m"></div><div class="line s"></div>
+      <span class="tag">挂件由浏览器扩展注入 · 本页无脚本</span>
+    </div>
+    <div class="tips">
+      <b>试试这些：</b><br>
+      · 点右下角的木鱼（或用 <kbd>Tab</kbd> 聚焦后按 <kbd>回车</kbd> / <kbd>空格</kbd>，长按连敲）<br>
+      · 按住拖动，或者快速甩出去<br>
+      · 用 <kbd>方向键</kbd> 微调位置<br>
+      · 悬停木鱼后点上方的 ⚙ 打开设置面板，换形象、改目标、看功德卡
+    </div>
+  </div>
+</body>
+</html>
